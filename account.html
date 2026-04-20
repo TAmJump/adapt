@@ -12,36 +12,40 @@
 
 <main class="container">
   <section class="page-intro">
+    <p class="section-label">Account</p>
     <h1>アカウント</h1>
     <p>プロフィール・子アプリ連携・セキュリティ設定</p>
   </section>
 
   <div class="stack">
 
-    <!-- プロフィール -->
     <section class="card">
       <h2 class="panel-title">プロフィール</h2>
       <table id="profileTbl"></table>
     </section>
 
-    <!-- 連携済みアプリ -->
     <section class="card">
       <h2 class="panel-title">連携済み子アプリ</h2>
       <div id="linksContent"></div>
     </section>
 
-    <!-- パスワード変更 -->
     <section class="card">
       <h2 class="panel-title">パスワード変更</h2>
       <div id="pwMsg"></div>
       <form id="pwForm" class="stack" style="max-width:440px;">
         <div class="field">
           <label for="oldPw">現在のパスワード</label>
-          <input id="oldPw" type="password" required autocomplete="current-password" />
+          <div class="pw-wrap">
+            <input id="oldPw" type="password" required autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-pw="oldPw">表示</button>
+          </div>
         </div>
         <div class="field">
           <label for="newPw">新しいパスワード</label>
-          <input id="newPw" type="password" required minlength="8" autocomplete="new-password" />
+          <div class="pw-wrap">
+            <input id="newPw" type="password" required minlength="8" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-pw="newPw">表示</button>
+          </div>
           <div class="hint">8文字以上</div>
         </div>
         <div>
@@ -59,8 +63,8 @@
   const session = await Adapt.requireLogin('login.html');
   if (!session) return;
   Adapt.renderHeader({ loggedIn: true, active: 'account' });
+  Adapt.bindPasswordToggles();
 
-  // プロフィール
   const u = session.user;
   const c = session.company || {};
   document.getElementById('profileTbl').innerHTML = `
@@ -73,15 +77,14 @@
     <tr><th>会社名</th><td>${Adapt.escapeHTML(c.name || '-')}</td></tr>
   `;
 
-  // 連携済みアプリ
   const linksContent = document.getElementById('linksContent');
   try {
     const r = await AdaptAPI.call('/api/apps/links');
     const links = r.links || [];
     if (links.length === 0) {
       linksContent.innerHTML = `
-        <p class="muted">まだ連携がありません。ホーム画面の各アプリカードから「連携する」を押してください。</p>
-        <p><a class="btn btn--dark btn--sm" href="index.html">ホームへ</a></p>
+        <p class="muted" style="margin-bottom:12px;">まだ連携がありません。ホーム画面の各アプリカードから「連携する」を押してください。</p>
+        <a class="btn btn--dark btn--sm" href="index.html">ホームへ</a>
       `;
     } else {
       linksContent.innerHTML = `
@@ -95,7 +98,7 @@
           <tbody>
             ${links.map(l => `
               <tr>
-                <td><span style="display:inline-block;width:8px;height:8px;background:${l.app_name === 'onetouch' ? 'var(--onetouch)' : 'var(--medadapt)'};vertical-align:middle;margin-right:6px;"></span>${l.app_name}</td>
+                <td><span class="dot" style="--c:${l.app_name === 'onetouch' ? 'var(--onetouch)' : 'var(--medadapt)'};"></span>${l.app_name}</td>
                 <td class="mono">${Adapt.escapeHTML(l.child_login_id)}</td>
                 <td class="mono">${Adapt.escapeHTML(l.child_company_code || '-')}</td>
                 <td class="mono">${Adapt.escapeHTML(l.child_role || '-')}</td>
@@ -121,7 +124,6 @@
     linksContent.innerHTML = `<div class="msg msg--err">取得失敗: ${e.message}</div>`;
   }
 
-  // パスワード変更
   const pwForm = document.getElementById('pwForm');
   const pwMsg = document.getElementById('pwMsg');
   const pwBtn = document.getElementById('pwBtn');

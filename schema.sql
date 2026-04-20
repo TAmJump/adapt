@@ -73,7 +73,20 @@ CREATE TABLE IF NOT EXISTS sso_tickets (
   FOREIGN KEY (staff_id) REFERENCES master_staff(staff_id)
 );
 
--- 6. 監査ログ（親アプリ内の操作記録）
+-- 6. メール認証トークン（登録時のメール確認フロー用）
+CREATE TABLE IF NOT EXISTS email_verifications (
+  token         TEXT PRIMARY KEY,
+  email         TEXT NOT NULL,
+  pending_data  TEXT NOT NULL,                       -- JSON: {company_name, login_id, name, email, phone, password_hash}
+  expires_at    TEXT NOT NULL,
+  used_at       TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_ver_email   ON email_verifications(email);
+CREATE INDEX IF NOT EXISTS idx_email_ver_expires ON email_verifications(expires_at);
+
+-- 7. 監査ログ（親アプリ内の操作記録）
 CREATE TABLE IF NOT EXISTS audit_logs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp   TEXT NOT NULL DEFAULT (datetime('now')),

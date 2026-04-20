@@ -13,11 +13,11 @@
 <main class="auth-wrap">
   <section class="auth-card">
     <h1 class="auth-title">ログイン</h1>
-    <p class="auth-sub">ADAPT / SIGN IN</p>
+    <p class="auth-sub">Adapt / Sign in</p>
 
     <div id="msg"></div>
 
-    <form id="loginForm" class="stack" autocomplete="on">
+    <form id="loginForm" class="stack" autocomplete="on" novalidate>
       <div class="field">
         <label for="loginId">ログインID</label>
         <input id="loginId" name="login_id" type="text" autocomplete="username" required />
@@ -25,7 +25,10 @@
       </div>
       <div class="field">
         <label for="password">パスワード</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <div class="pw-wrap">
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button type="button" class="pw-toggle" data-pw="password">表示</button>
+        </div>
       </div>
       <button class="btn btn--primary btn--block" id="submitBtn" type="submit">ログイン</button>
     </form>
@@ -39,12 +42,10 @@
 <script src="assets/common.js"></script>
 <script>
   Adapt.renderHeader({ loggedIn: false });
+  Adapt.bindPasswordToggles();
 
-  // すでにログイン済みならホームへ
   if (AdaptAPI.token()) {
-    AdaptAPI.call('/api/auth/me')
-      .then(() => location.href = 'index.html')
-      .catch(() => AdaptAPI.clear());
+    AdaptAPI.call('/api/auth/me').then(() => location.href = 'index.html').catch(() => AdaptAPI.clear());
   }
 
   const form = document.getElementById('loginForm');
@@ -70,6 +71,7 @@
     } catch (e) {
       const map = {
         invalid_credentials: 'ログインIDまたはパスワードが違います。',
+        pending_verification: 'メール確認が未完了です。登録時に送信されたメールのボタンを押してください。',
         account_suspended: 'このアカウントは停止されています。',
         missing_fields: '入力を確認してください。'
       };

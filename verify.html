@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>メール確認｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="auth-wrap">
+  <section class="auth-card" style="max-width:520px;">
+    <h1 class="auth-title" id="title">メール確認</h1>
+    <p class="auth-sub">Adapt / Verify email</p>
+
+    <div id="body">
+      <div class="msg msg--info">確認しています…</div>
+    </div>
+  </section>
+</main>
+
+<script src="assets/common.js"></script>
+<script>
+  Adapt.renderHeader({ loggedIn: false });
+
+  const body = document.getElementById('body');
+  const title = document.getElementById('title');
+  const token = new URLSearchParams(location.search).get('token');
+
+  (async function () {
+    if (!token) {
+      title.textContent = 'トークンがありません';
+      body.innerHTML = `<div class="msg msg--err">URLにトークンが含まれていません。メール内のボタンをもう一度開き直してください。</div>`;
+      return;
+    }
+
+    // 1. トークン情報を取得（何が作られるか確認のため）
+    try {
+      const info = await AdaptAPI.call('/api/auth/verify-info?token=' + encodeURIComponent(token));
+      title.textContent = '登録内容の確認';
+      body.innerHTML = `
+        <p class="muted" style="margin:0 0 16px 0;">以下の内容でAdaptアカウントを作成します。よろしければ「登録を完了する」を押してください。</p>
+        <table style="margin-bottom:18px;">
+          <tr><th style="width:140px">会社名</th><td>${Adapt.escapeHTML(info.company_name)}</td></tr>
+          <tr><th>管理者氏名</th><td>${Adapt.escapeHTML(info.name)}</td></tr>
+          <tr><th>メール</th><td class="mono">${Adapt.escapeHTML(info.email)}</td></tr>
+          <tr><th>ログインID</th><td class="mono">${Adapt.escapeHTML(info.login_id)}</td></tr>
+        </table>
+        <div id="verifyMsg"></div>
+        <button class="btn btn--primary btn--block" id="verifyBtn" type="button">登録を完了する</button>
+        <div class="auth-footer">間違いがある場合は <a href="register.html">最初から登録</a> してください。</div>
+      `;
+      document.getElementById('verifyBtn').addEventListener('click', verify);
+    } catch (e) {
+      const map = {
+        invalid_token: 'このリンクは無効です。正しいリンクをメールからもう一度開いてください。',
+        already_used:  'このリンクはすでに使用されています。<a href="login.html">ログイン</a>してください。',
+        expired:       'このリンクは期限切れです（発行から24時間）。<a href="register.html">最初から登録</a>してください。',
+        missing_token: 'トークンがありません。'
+      };
+      title.textContent = '確認できませんでした';
+      body.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+    }
+  })();
+
+  async function verify() {
+    const btn = document.getElementById('verifyBtn');
+    const msg = document.getElementById('verifyMsg');
+    btn.disabled = true;
+    btn.textContent = '処理中…';
+    msg.innerHTML = '';
+    try {
+      const data = await AdaptAPI.call('/api/auth/verify', { method: 'POST', body: { token } });
+      AdaptAPI.setToken(data.token, data.expires_at);
+      AdaptAPI.setUser(data.user);
+      title.textContent = '登録が完了しました';
+      body.innerHTML = `
+        <div class="msg msg--ok">
+          Adaptアカウントを発行しました。<br>
+          そのままログインされています。
+        </div>
+        <a class="btn btn--primary btn--block" href="index.html">ホームへ</a>
+      `;
+    } catch (e) {
+      const map = {
+        login_id_taken: 'このログインIDは別の方が先に取得しました。最初から登録し直してください。',
+        already_used: 'このリンクはすでに使用されています。',
+        expired: 'このリンクは期限切れです。'
+      };
+      msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = '登録を完了する';
+    }
+  }
+</script>
+</body>
+</html>

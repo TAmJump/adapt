@@ -1,21 +1,15 @@
 /* =========================================================
-   Adapt - Shared client utilities
-   - API base configuration
-   - Auth helpers (localStorage token)
-   - Header rendering
+   Adapt - Shared client utilities (v2)
    ========================================================= */
 
-// ★ 本番デプロイ後に書き換え
 window.ADAPT_CONFIG = {
   API_BASE: 'https://adapt-api.animalb001.workers.dev',
-  // 子アプリURL（ランチャー表示用）
   APPS: {
     onetouch: {
       name: 'OneTouchAdapt',
       kana: 'ワンタッチアダプト',
       desc: '施設設備の通報・管理会社連携・QR台帳。',
       accent: '#d4380d',
-      letter: 'O',
       url: 'https://tamjump.github.io/onetouch_app/login.html',
       lp:  'https://one-touch.tamjump.com',
       tags: '施設設備管理'
@@ -23,9 +17,8 @@ window.ADAPT_CONFIG = {
     medadapt: {
       name: 'MedAdapt',
       kana: 'メドアダプト',
-      desc: '医療・介護の法人間連携OS。NDA/退院通知/面談。',
+      desc: '医療・介護の法人間連携OS。NDA・退院通知・面談。',
       accent: '#0891b2',
-      letter: 'M',
       url: 'https://medadapt.scsgo.co.jp/app.html',
       lp:  'https://medadapt.scsgo.co.jp',
       tags: '医療介護連携'
@@ -50,17 +43,12 @@ const AdaptAPI = {
     try { return JSON.parse(localStorage.getItem('adapt_user') || 'null'); }
     catch { return null; }
   },
-
   async call(path, opts = {}) {
-    const headers = Object.assign(
-      { 'Content-Type': 'application/json' },
-      opts.headers || {}
-    );
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     const t = AdaptAPI.token();
     if (t) headers['Authorization'] = 'Bearer ' + t;
     const res = await fetch(AdaptAPI.base() + path, {
-      method: opts.method || 'GET',
-      headers,
+      method: opts.method || 'GET', headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined
     });
     const text = await res.text();
@@ -75,7 +63,6 @@ const AdaptAPI = {
   }
 };
 
-// ---------- 認証ガード ----------
 async function requireLogin(redirectTo = 'login.html') {
   const t = AdaptAPI.token();
   if (!t) { location.href = redirectTo; return null; }
@@ -90,7 +77,6 @@ async function requireLogin(redirectTo = 'login.html') {
   }
 }
 
-// ---------- ヘッダー描画 ----------
 function renderHeader({ loggedIn = false, active = '' } = {}) {
   const user = AdaptAPI.getUser();
   const nav = loggedIn
@@ -98,7 +84,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
       <a href="index.html"  class="${active === 'home'    ? 'active' : ''}">ホーム</a>
       <a href="account.html" class="${active === 'account' ? 'active' : ''}">アカウント</a>
       <span class="hdr__who">${user ? escapeHTML(user.login_id) : ''}</span>
-      <button id="adaptLogoutBtn">ログアウト</button>
+      <button id="adaptLogoutBtn" type="button">ログアウト</button>
     `
     : `
       <a href="login.html">ログイン</a>
@@ -129,13 +115,28 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   });
 }
 
+// パスワード表示トグル
+function bindPasswordToggles(root = document) {
+  root.querySelectorAll('.pw-toggle').forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.pw);
+      if (!target) return;
+      const show = target.type === 'password';
+      target.type = show ? 'text' : 'password';
+      btn.textContent = show ? '非表示' : '表示';
+    });
+  });
+}
+
 function escapeHTML(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
 }
 
-function toast(msg, kind = 'info', ms = 3000) {
+function toast(msg, kind = 'info', ms = 3500) {
   const el = document.createElement('div');
   el.className = 'msg msg--' + (kind === 'error' ? 'err' : kind === 'success' ? 'ok' : 'info');
   el.textContent = msg;
@@ -145,9 +146,10 @@ function toast(msg, kind = 'info', ms = 3000) {
   el.style.zIndex = '9999';
   el.style.boxShadow = 'var(--shadow-lg)';
   el.style.maxWidth = '360px';
+  el.style.background = '#fff';
   document.body.appendChild(el);
   setTimeout(() => el.remove(), ms);
 }
 
 window.AdaptAPI = AdaptAPI;
-window.Adapt = { requireLogin, renderHeader, escapeHTML, toast };
+window.Adapt = { requireLogin, renderHeader, escapeHTML, toast, bindPasswordToggles };

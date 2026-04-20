@@ -12,6 +12,7 @@
 
 <main class="container">
   <section class="page-intro">
+    <p class="section-label">Home</p>
     <h1 id="greet">ようこそ</h1>
     <p>Adaptファミリーのアプリを一覧から選んで起動できます。子アプリを未連携の場合は「連携する」から既存のアカウントを紐付けてください。</p>
   </section>
@@ -19,12 +20,11 @@
   <div id="msg"></div>
 
   <section>
-    <h2 class="panel-title">子アプリ</h2>
+    <p class="section-label">子アプリ</p>
     <div id="grid" class="launcher-grid"></div>
   </section>
 </main>
 
-<!-- 連携モーダル -->
 <div class="modal-bg" id="linkModal">
   <div class="modal">
     <h3 class="modal__title" id="linkTitle">アカウントを連携</h3>
@@ -38,8 +38,11 @@
       </div>
       <div class="field">
         <label for="linkPassword">子アプリのパスワード</label>
-        <input id="linkPassword" type="password" required autocomplete="current-password" />
-        <div class="hint">パスワードは連携確認にのみ使用し、Adapt側には保存されません。</div>
+        <div class="pw-wrap">
+          <input id="linkPassword" type="password" required autocomplete="current-password" />
+          <button type="button" class="pw-toggle" data-pw="linkPassword">表示</button>
+        </div>
+        <div class="hint">連携確認にのみ使用し、Adapt側には保存しません。</div>
       </div>
       <div class="modal__actions">
         <button type="button" class="btn btn--ghost" id="linkCancel">キャンセル</button>
@@ -57,25 +60,19 @@
 
   Adapt.renderHeader({ loggedIn: true, active: 'home' });
 
-  const greet = document.getElementById('greet');
-  greet.textContent = `ようこそ、${session.user.name || session.user.login_id} さん`;
+  document.getElementById('greet').textContent = `ようこそ、${session.user.name || session.user.login_id} さん`;
 
   if (new URLSearchParams(location.search).get('welcome') === '1') {
-    const msg = document.getElementById('msg');
-    msg.innerHTML = `
+    document.getElementById('msg').innerHTML = `
       <div class="msg msg--ok">
         Adaptアカウントを作成しました。<br>
-        すでにOneTouchAdaptやMedAdaptのアカウントをお持ちの場合は、
-        各カードの「連携する」から紐付けしてください。
+        すでにOneTouchAdaptやMedAdaptのアカウントをお持ちの場合は、各カードの「連携する」から紐付けしてください。
       </div>`;
   }
 
-  // 連携状態の取得
   const linksRes = await AdaptAPI.call('/api/apps/links');
   const linkedSet = {};
-  (linksRes.links || []).forEach(l => {
-    linkedSet[l.app_name] = l;
-  });
+  (linksRes.links || []).forEach(l => linkedSet[l.app_name] = l);
 
   const apps = window.ADAPT_CONFIG.APPS;
   const grid = document.getElementById('grid');
@@ -84,16 +81,13 @@
     return `
       <article class="app-card" data-app="${key}" style="--brand:${a.accent}">
         <div class="app-card__head">
-          <div class="app-card__icon">${a.letter}</div>
+          <h3 class="app-card__name">${a.name}</h3>
           <span class="app-card__badge ${linked ? 'badge--linked' : 'badge--unlinked'}">
             ${linked ? 'Linked' : 'Not linked'}
           </span>
         </div>
-        <div>
-          <h3 class="app-card__name">${a.name}</h3>
-          <p class="app-card__desc">${a.desc}</p>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <p class="app-card__desc">${a.desc}</p>
+        <div class="app-card__actions">
           <button class="btn ${linked ? 'btn--dark' : 'btn--primary'} btn--sm" data-action="${linked ? 'open' : 'link'}" data-app="${key}">
             ${linked ? '開く' : '連携する'}
           </button>
@@ -101,15 +95,13 @@
           ${linked ? `<button class="btn btn--ghost btn--sm" data-action="unlink" data-link-id="${linked.id}">解除</button>` : ''}
         </div>
         <div class="app-card__meta">
-          <span class="reg-mark"></span>
           ${a.tags}
-          ${linked ? ` ／ ${Adapt.escapeHTML(linked.child_login_id)}` : ''}
+          ${linked ? ` / ${Adapt.escapeHTML(linked.child_login_id)}` : ''}
         </div>
       </article>
     `;
   }).join('');
 
-  // イベント
   grid.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
@@ -122,9 +114,7 @@
       btn.disabled = true;
       btn.textContent = '起動中…';
       try {
-        const r = await AdaptAPI.call('/api/apps/sso-ticket', {
-          method: 'POST', body: { app_name: app }
-        });
+        const r = await AdaptAPI.call('/api/apps/sso-ticket', { method: 'POST', body: { app_name: app } });
         window.open(r.redirect_url, '_blank', 'noopener');
       } catch (err) {
         Adapt.toast('起動に失敗: ' + err.message, 'error');
@@ -137,13 +127,10 @@
       try {
         await AdaptAPI.call('/api/apps/links/' + btn.dataset.linkId, { method: 'DELETE' });
         location.reload();
-      } catch (err) {
-        Adapt.toast('解除失敗: ' + err.message, 'error');
-      }
+      } catch (err) { Adapt.toast('解除失敗: ' + err.message, 'error'); }
     }
   });
 
-  // --- モーダル ---
   const modal = document.getElementById('linkModal');
   const titleEl = document.getElementById('linkTitle');
   const subEl = document.getElementById('linkSub');
@@ -152,22 +139,20 @@
   const msgEl = document.getElementById('linkMsg');
   const submitBtn = document.getElementById('linkSubmit');
 
+  Adapt.bindPasswordToggles();
+
   function openLink(app) {
     const info = apps[app];
     titleEl.textContent = `${info.name} と連携`;
     subEl.textContent = `${info.name}の既存アカウント（ログインID + パスワード）を入力してください。認証に成功した場合のみ連携されます。`;
-    appEl.value = app;
     msgEl.innerHTML = '';
     form.reset();
     appEl.value = app;
     modal.classList.add('open');
+    setTimeout(() => document.getElementById('linkLoginId').focus(), 50);
   }
-  document.getElementById('linkCancel').addEventListener('click', () => {
-    modal.classList.remove('open');
-  });
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.remove('open');
-  });
+  document.getElementById('linkCancel').addEventListener('click', () => modal.classList.remove('open'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
