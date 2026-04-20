@@ -1,6 +1,6 @@
 # Adapt
 
-**Adaptファミリー親アプリ** — OneTouchAdapt・MedAdapt 等の子アプリを統一ID/SSOで束ねるランチャー。
+**Adaptプラットフォーム** — OneTouchAdapt・MedAdapt 等のモジュールを統一ID/SSOで束ねるランチャー。
 
 - **URL**: https://tamjump.github.io/adapt/ （Pages有効化後）
 - **API**: https://adapt-api.animalb001.workers.dev （Worker作成後）
@@ -16,15 +16,15 @@
 └── MedAdapt       (TAmJump/medadapt)       医療介護連携
 ```
 
-- 親アプリは**無料**。Proプランは従来通り各子アプリで個別契約。
-- 親 `login_id` が正本。`app_links` テーブルで子アプリID（`TEST1-admin` や `ADM-TIGER`）にマッピング。
-- SSO: 親が60秒の短命チケットを発行 → 子アプリURLに `?sso_ticket=XXX` で渡す → 子が親API `/api/apps/sso-verify` で引き換え。
+- Adaptプラットフォームは**無料**。Proプランは従来通り各モジュールで個別契約。
+- 親 `login_id` が正本。`app_links` テーブルでモジュールID（`TEST1-admin` や `ADM-TIGER`）にマッピング。
+- SSO: 親が60秒の短命チケットを発行 → モジュールURLに `?sso_ticket=XXX` で渡す → 子が親API `/api/apps/sso-verify` で引き換え。
 
 ## 2. ファイル
 
 | ファイル | 役割 |
 |---|---|
-| `index.html` | ランチャー（ログイン必須。子アプリカード＋SSO起動＋連携モーダル） |
+| `index.html` | ランチャー（ログイン必須。モジュールカード＋SSO起動＋連携モーダル） |
 | `login.html` | ログイン |
 | `register.html` | 会社+初期管理者登録 |
 | `account.html` | プロフィール / 連携一覧 / PW変更 |
@@ -78,15 +78,15 @@
 2. **新規登録** → 会社名・ログインID（例: `tamjump-admin`）・パスワード（8文字以上）
 3. 自動ログイン → ランチャー画面
 4. OneTouchAdaptカード「連携する」→ 子ログインID `TEST1-admin` + PW `19800101a` で連携確認
-5. 連携済みになったら「開く」→ 新タブで子アプリが開く（`?sso_ticket=XXX` 付き）
+5. 連携済みになったら「開く」→ 新タブでモジュールが開く（`?sso_ticket=XXX` 付き）
 
-## 4. 子アプリ側のSSO受け口（Phase 2・未実装）
+## 4. モジュール側のSSO受け口（Phase 2・未実装）
 
-現状、子アプリは `?sso_ticket` を受け取っても無視して通常のログインを求めます。**完全SSOには子アプリ側の対応が必要**です。
+現状、モジュールは `?sso_ticket` を受け取っても無視して通常のログインを求めます。**完全SSOにはモジュール側の対応が必要**です。
 
-### 子アプリ側で追加すべきもの
+### モジュール側で追加すべきもの
 
-**子アプリ Worker (新エンドポイント):**
+**モジュール Worker (新エンドポイント):**
 ```js
 // POST /api/auth/sso-login
 if (path === '/api/auth/sso-login' && method === 'POST') {
@@ -102,7 +102,7 @@ if (path === '/api/auth/sso-login' && method === 'POST') {
 }
 ```
 
-**子アプリ login.html 冒頭:**
+**モジュール login.html 冒頭:**
 ```js
 const sso = new URLSearchParams(location.search).get('sso_ticket');
 if (sso) {
@@ -125,7 +125,7 @@ if (sso) {
 | `master_companies` | 親会社（ADP-000001 形式）|
 | `master_staff` | 親スタッフ（ADP-STF-000001 形式・login_idユニーク）|
 | `sessions` | Bearerトークン（30日有効）|
-| `app_links` | 親↔子アプリ紐付け（UNIQUE: staff_id+app_name+child_login_id）|
+| `app_links` | 親↔モジュール紐付け（UNIQUE: staff_id+app_name+child_login_id）|
 | `sso_tickets` | 60秒ワンタイムチケット |
 | `audit_logs` | 操作ログ |
 
@@ -147,20 +147,20 @@ if (sso) {
 
 ## 7. セキュリティメモ
 
-- パスワード: SHA-256（子アプリと同方式）
+- パスワード: SHA-256（モジュールと同方式）
 - Bearerトークン: 48文字ランダム・30日
 - SSOチケット: 48文字ランダム・60秒・**使い捨て**（consumed_at チェック）
 - CORS: `ALLOWED_ORIGINS` で明示
-- 子アプリ認証はパスワードを**保存しない**（連携時の1回だけ子APIに投げる）
+- モジュール認証はパスワードを**保存しない**（連携時の1回だけ子APIに投げる）
 
 ## 8. 今後の拡張
 
-- [ ] 子アプリ側 `/api/auth/sso-login` 実装（Phase 2）
+- [ ] モジュール側 `/api/auth/sso-login` 実装（Phase 2）
 - [ ] メール認証（新規登録時）
 - [ ] パスワードリセット（メール経由）
 - [ ] 親スタッフ複数人対応（master_admin がスタッフ招待）
 - [ ] アイコン画像（manifest `icons[]` 埋め）
-- [ ] Android TWA（子アプリと同じ方式）
+- [ ] Android TWA（モジュールと同じ方式）
 - [ ] sso_tickets の定期クリーンアップ（Cron Triggers）
 
 ## 9. 認証情報

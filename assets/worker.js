@@ -446,7 +446,7 @@ ${verifyUrl}
         return json({ ok: true }, 200, cors);
       }
 
-      // =============== 子アプリ連携 ===============
+      // =============== モジュール連携 ===============
 
       if (path === '/api/apps/links' && method === 'GET') {
         const r = await requireAuth(request, db);

@@ -94,7 +94,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
     <header class="hdr">
       <a href="index.html" class="hdr__brand">
         Adapt
-        <span class="hdr__brand-sub">Family Portal</span>
+        <span class="hdr__brand-sub">Platform Portal</span>
       </a>
       <nav class="hdr__nav">${nav}</nav>
     </header>

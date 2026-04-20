@@ -14,13 +14,13 @@
   <section class="page-intro">
     <p class="section-label">Home</p>
     <h1 id="greet">ようこそ</h1>
-    <p>Adaptファミリーのアプリを一覧から選んで起動できます。子アプリを未連携の場合は「連携する」から既存のアカウントを紐付けてください。</p>
+    <p>Adaptモジュールを一覧から選んで起動できます。モジュールを未連携の場合は「連携する」から既存のアカウントを紐付けてください。</p>
   </section>
 
   <div id="msg"></div>
 
   <section>
-    <p class="section-label">子アプリ</p>
+    <p class="section-label">モジュール</p>
     <div id="grid" class="launcher-grid"></div>
   </section>
 </main>
@@ -33,11 +33,11 @@
     <form id="linkForm" class="stack">
       <input type="hidden" id="linkApp" />
       <div class="field">
-        <label for="linkLoginId">子アプリのログインID</label>
+        <label for="linkLoginId">モジュールのログインID</label>
         <input id="linkLoginId" type="text" required autocomplete="off" />
       </div>
       <div class="field">
-        <label for="linkPassword">子アプリのパスワード</label>
+        <label for="linkPassword">モジュールのパスワード</label>
         <div class="pw-wrap">
           <input id="linkPassword" type="password" required autocomplete="current-password" />
           <button type="button" class="pw-toggle" data-pw="linkPassword">表示</button>
@@ -172,7 +172,7 @@
       location.reload();
     } catch (err) {
       const map = {
-        child_auth_failed: '子アプリのログインに失敗しました。IDとパスワードを確認してください。',
+        child_auth_failed: 'モジュールのログインに失敗しました。IDとパスワードを確認してください。',
         already_linked: 'このアカウントは既に連携されています。',
         invalid_app: '無効なアプリです。'
       };
