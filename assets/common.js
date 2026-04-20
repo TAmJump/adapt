@@ -79,13 +79,6 @@ async function requireLogin(redirectTo = 'login.html') {
 
 function renderHeader({ loggedIn = false, active = '' } = {}) {
   const user = AdaptAPI.getUser();
-  const whoLine = user
-    ? `<div class="hdr__who">
-         ${escapeHTML(user.login_id)}
-         <span class="hdr__who-sep">／</span>
-         <span class="hdr__who-name">${escapeHTML(user.name || '')}</span>
-       </div>`
-    : '';
 
   const navInner = loggedIn
     ? `
@@ -98,12 +91,15 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
       <a href="register.html">新規登録</a>
     `;
 
-  const right = loggedIn
-    ? `<div class="hdr__right">
-         <nav class="hdr__nav">${navInner}</nav>
-         ${whoLine}
+  const subbar = (loggedIn && user)
+    ? `<div class="hdr-subbar">
+         <div class="hdr__who">
+           ${escapeHTML(user.login_id)}
+           <span class="hdr__who-sep">／</span>
+           <span class="hdr__who-name">${escapeHTML(user.name || '')}</span>
+         </div>
        </div>`
-    : `<nav class="hdr__nav">${navInner}</nav>`;
+    : '';
 
   const html = `
     <header class="hdr">
@@ -111,8 +107,9 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
         Adapt
         <span class="hdr__brand-sub">Platform Portal</span>
       </a>
-      ${right}
+      <nav class="hdr__nav">${navInner}</nav>
     </header>
+    ${subbar}
   `;
   const holder = document.getElementById('adapt-header') || (() => {
     const d = document.createElement('div');
@@ -120,7 +117,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
     document.body.prepend(d);
     return d;
   })();
-  holder.outerHTML = html;
+  holder.outerHTML = `<div id="adapt-header">${html}</div>`;
 
   const btn = document.getElementById('adaptLogoutBtn');
   if (btn) btn.addEventListener('click', async () => {

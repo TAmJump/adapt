@@ -66,19 +66,13 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
   background: var(--bg);
   border-bottom: 1px solid var(--line);
   padding: 0 28px;
-  min-height: 72px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
   z-index: 50;
-}
-.hdr__right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
 }
 .hdr__brand {
   display: inline-flex;
@@ -115,6 +109,18 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
 }
 .hdr__nav a:hover, .hdr__nav button:hover { color: var(--red); border-bottom-color: var(--red); }
 .hdr__nav a.active { border-bottom-color: var(--ink); color: var(--ink); }
+/* ヘッダー下のサブバー（ログイン中ユーザー表示・クリック不可） */
+.hdr-subbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 28px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  position: sticky;
+  top: 64px;
+  z-index: 49;
+}
 .hdr__who {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
@@ -461,7 +467,8 @@ tr:last-child td { border-bottom: none; }
 }
 
 @media (max-width: 640px) {
-  .hdr { padding: 0 18px; min-height: 62px; }
+  .hdr { padding: 0 18px; height: 56px; }
+  .hdr-subbar { padding: 6px 18px; top: 56px; }
   .hdr__brand { font-size: 18px; }
   .hdr__nav { gap: 14px; }
   .hdr__who { font-size: 10px; }
