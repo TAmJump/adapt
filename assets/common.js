@@ -79,24 +79,39 @@ async function requireLogin(redirectTo = 'login.html') {
 
 function renderHeader({ loggedIn = false, active = '' } = {}) {
   const user = AdaptAPI.getUser();
-  const nav = loggedIn
+  const whoLine = user
+    ? `<div class="hdr__who">
+         ${escapeHTML(user.login_id)}
+         <span class="hdr__who-sep">／</span>
+         <span class="hdr__who-name">${escapeHTML(user.name || '')}</span>
+       </div>`
+    : '';
+
+  const navInner = loggedIn
     ? `
       <a href="index.html"  class="${active === 'home'    ? 'active' : ''}">ホーム</a>
       <a href="account.html" class="${active === 'account' ? 'active' : ''}">アカウント</a>
-      <span class="hdr__who">${user ? escapeHTML(user.login_id) : ''}</span>
       <button id="adaptLogoutBtn" type="button">ログアウト</button>
     `
     : `
       <a href="login.html">ログイン</a>
       <a href="register.html">新規登録</a>
     `;
+
+  const right = loggedIn
+    ? `<div class="hdr__right">
+         <nav class="hdr__nav">${navInner}</nav>
+         ${whoLine}
+       </div>`
+    : `<nav class="hdr__nav">${navInner}</nav>`;
+
   const html = `
     <header class="hdr">
       <a href="index.html" class="hdr__brand">
         Adapt
         <span class="hdr__brand-sub">Platform Portal</span>
       </a>
-      <nav class="hdr__nav">${nav}</nav>
+      ${right}
     </header>
   `;
   const holder = document.getElementById('adapt-header') || (() => {

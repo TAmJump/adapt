@@ -66,13 +66,19 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
   background: var(--bg);
   border-bottom: 1px solid var(--line);
   padding: 0 28px;
-  height: 64px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
   z-index: 50;
+}
+.hdr__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 .hdr__brand {
   display: inline-flex;
@@ -114,7 +120,15 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
   font-size: 11px;
   color: var(--ink-muted);
   letter-spacing: 0.04em;
-  padding: 6px 0;
+  line-height: 1.4;
+}
+.hdr__who-name {
+  font-family: 'Noto Sans JP', sans-serif;
+  color: var(--ink-soft);
+}
+.hdr__who-sep {
+  color: var(--ink-mute-2);
+  margin: 0 6px;
 }
 
 /* ---------- カード ---------- */
@@ -447,9 +461,10 @@ tr:last-child td { border-bottom: none; }
 }
 
 @media (max-width: 640px) {
-  .hdr { padding: 0 18px; height: 56px; }
+  .hdr { padding: 0 18px; min-height: 62px; }
   .hdr__brand { font-size: 18px; }
   .hdr__nav { gap: 14px; }
+  .hdr__who { font-size: 10px; }
   .auth-card { padding: 32px 22px; }
   .auth-title { font-size: 23px; }
   .container { padding: 24px 18px 64px; }
