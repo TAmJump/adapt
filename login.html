@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>ログイン｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="auth-wrap">
+  <section class="auth-card">
+    <h1 class="auth-title">ログイン</h1>
+    <p class="auth-sub">ADAPT / SIGN IN</p>
+
+    <div id="msg"></div>
+
+    <form id="loginForm" class="stack" autocomplete="on">
+      <div class="field">
+        <label for="loginId">ログインID</label>
+        <input id="loginId" name="login_id" type="text" autocomplete="username" required />
+        <div class="hint">半角英数字・<code>-</code>・<code>_</code></div>
+      </div>
+      <div class="field">
+        <label for="password">パスワード</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <button class="btn btn--primary btn--block" id="submitBtn" type="submit">ログイン</button>
+    </form>
+
+    <div class="auth-footer">
+      アカウントをお持ちでない場合 <a href="register.html">新規登録</a>
+    </div>
+  </section>
+</main>
+
+<script src="assets/common.js"></script>
+<script>
+  Adapt.renderHeader({ loggedIn: false });
+
+  // すでにログイン済みならホームへ
+  if (AdaptAPI.token()) {
+    AdaptAPI.call('/api/auth/me')
+      .then(() => location.href = 'index.html')
+      .catch(() => AdaptAPI.clear());
+  }
+
+  const form = document.getElementById('loginForm');
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    msg.innerHTML = '';
+    btn.disabled = true;
+    btn.textContent = 'ログイン中…';
+    try {
+      const data = await AdaptAPI.call('/api/auth/login', {
+        method: 'POST',
+        body: {
+          login_id: document.getElementById('loginId').value.trim(),
+          password: document.getElementById('password').value
+        }
+      });
+      AdaptAPI.setToken(data.token, data.expires_at);
+      AdaptAPI.setUser(data.user);
+      location.href = 'index.html';
+    } catch (e) {
+      const map = {
+        invalid_credentials: 'ログインIDまたはパスワードが違います。',
+        account_suspended: 'このアカウントは停止されています。',
+        missing_fields: '入力を確認してください。'
+      };
+      msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'ログイン';
+    }
+  });
+</script>
+</body>
+</html>

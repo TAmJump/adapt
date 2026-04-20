@@ -1,0 +1,12 @@
+{
+  "name": "Adapt",
+  "short_name": "Adapt",
+  "description": "Adaptファミリー（OneTouchAdapt / MedAdapt）親アプリ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f5ef",
+  "theme_color": "#0a0e1a",
+  "lang": "ja",
+  "icons": []
+}

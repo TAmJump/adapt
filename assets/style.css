@@ -1,0 +1,511 @@
+/* =========================================================
+   Adapt - Shared styles
+   Design direction:
+     - Light, "rice-paper" warmth (#f7f5ef)
+     - Deep ink-navy typography (#0a0e1a)
+     - Vermilion seal accent for primary actions (#c4432b)
+     - Zen Kaku Gothic New (display) + Noto Sans JP (body)
+     - Thin rules + registration marks (shipping-manifest feel)
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --paper: #f7f5ef;
+  --paper-2: #efede6;
+  --ink: #0a0e1a;
+  --ink-soft: #1f2432;
+  --ink-muted: #5a6070;
+  --ink-mute-2: #8a8f9a;
+  --line: #d8d3c6;
+  --line-2: #e8e4d8;
+  --seal: #c4432b;
+  --seal-dark: #a83418;
+  --navy: #1a3a5c;
+  --success: #2d6a4f;
+  --danger: #a52a2a;
+  --warning: #b5651d;
+
+  /* Child app brand colors */
+  --onetouch: #d4380d;
+  --medadapt: #0891b2;
+
+  --radius: 4px;
+  --radius-lg: 6px;
+  --shadow-sm: 0 1px 2px rgba(10,14,26,.04);
+  --shadow: 0 2px 8px rgba(10,14,26,.06), 0 1px 2px rgba(10,14,26,.04);
+  --shadow-lg: 0 8px 24px rgba(10,14,26,.10), 0 2px 6px rgba(10,14,26,.06);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(10,14,26,0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+a { color: var(--navy); text-decoration: none; }
+a:hover { color: var(--seal); }
+
+/* ---------- 見出し ---------- */
+.display {
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+/* ---------- ヘッダー ---------- */
+.hdr {
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  padding: 0 24px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  background: rgba(247, 245, 239, 0.85);
+}
+.hdr__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.hdr__brand::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: var(--seal);
+  transform: translateY(1px);
+  border-radius: 1px;
+}
+.hdr__brand-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hdr__nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.hdr__nav a, .hdr__nav button {
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+.hdr__nav a:hover, .hdr__nav button:hover {
+  background: var(--line-2);
+  color: var(--ink);
+}
+.hdr__who {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ---------- カード / パネル ---------- */
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+}
+.panel-title {
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+  margin: 0 0 16px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.panel-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 16px;
+  background: var(--seal);
+}
+
+/* ---------- フォーム ---------- */
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 0 0 6px 0;
+  letter-spacing: 0.02em;
+}
+input[type=text], input[type=password], input[type=email], input[type=tel], textarea, select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  transition: border-color .15s, box-shadow .15s;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(10,14,26,.08);
+}
+.field { margin-bottom: 16px; }
+.hint {
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ---------- ボタン ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform .06s, background .15s, border-color .15s;
+  letter-spacing: 0.02em;
+}
+.btn:active { transform: translateY(1px); }
+.btn--primary {
+  background: var(--seal);
+  color: #fff;
+  border-color: var(--seal);
+}
+.btn--primary:hover { background: var(--seal-dark); border-color: var(--seal-dark); }
+.btn--ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+.btn--ghost:hover { background: var(--line-2); }
+.btn--dark {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.btn--dark:hover { background: var(--ink-soft); }
+.btn--block { width: 100%; }
+.btn--sm { font-size: 12px; padding: 7px 12px; }
+.btn[disabled] { opacity: .4; cursor: not-allowed; }
+
+/* ---------- メッセージ ---------- */
+.msg {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.msg--err { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+.msg--ok  { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
+.msg--info { background: #eff6ff; color: var(--navy); border: 1px solid #bfdbfe; }
+
+/* ---------- レイアウト ---------- */
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+.auth-wrap {
+  min-height: calc(100vh - 64px);
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 40px 36px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+}
+.auth-card::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--seal) 0%, var(--seal) 60%, var(--navy) 60%, var(--navy) 100%);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.auth-title {
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  font-size: 26px;
+  margin: 0 0 6px 0;
+}
+.auth-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 28px 0;
+}
+.auth-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* ---------- アプリカードグリッド（ランチャー）---------- */
+.launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.app-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  transition: transform .1s, box-shadow .15s, border-color .15s;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+}
+.app-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 4px;
+  background: var(--brand, var(--ink));
+}
+.app-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--ink-mute-2);
+}
+.app-card[data-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
+.app-card[data-disabled="true"]:hover { transform: none; box-shadow: var(--shadow-sm); }
+
+.app-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.app-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--brand, var(--ink));
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+}
+.app-card__badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 100px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.badge--linked   { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
+.badge--unlinked { background: #fff7ed; color: var(--warning); border: 1px solid #fed7aa; }
+
+.app-card__name {
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  margin: 0;
+}
+.app-card__desc {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+.app-card__meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-mute-2);
+  letter-spacing: 0.04em;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+/* ---------- テーブル ---------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper-2);
+}
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+tr:hover td { background: var(--paper-2); }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+/* ---------- モーダル ---------- */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: rgba(10,14,26,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 460px;
+  padding: 28px;
+  box-shadow: var(--shadow-lg);
+}
+.modal__title {
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  margin: 0 0 6px 0;
+}
+.modal__sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin: 0 0 20px 0;
+  line-height: 1.6;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ---------- メタ情報セクション ---------- */
+.page-intro {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.page-intro h1 {
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 900;
+  font-size: 30px;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.01em;
+}
+.page-intro p {
+  color: var(--ink-muted);
+  font-size: 13px;
+  margin: 0;
+  max-width: 640px;
+  line-height: 1.7;
+}
+
+/* registration mark (小さな十字マーク) */
+.reg-mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  position: relative;
+  vertical-align: middle;
+}
+.reg-mark::before, .reg-mark::after {
+  content: '';
+  position: absolute;
+  background: var(--ink-muted);
+}
+.reg-mark::before { left: 3px; top: 0; width: 2px; height: 8px; }
+.reg-mark::after  { top: 3px; left: 0; width: 8px; height: 2px; }
+
+.row { display: flex; gap: 12px; align-items: center; }
+.spacer { flex: 1; }
+.muted { color: var(--ink-muted); font-size: 12px; }
+.stack > * + * { margin-top: 16px; }
+
+@media (max-width: 640px) {
+  .hdr { padding: 0 16px; height: 56px; }
+  .hdr__brand { font-size: 18px; }
+  .auth-card { padding: 28px 20px; }
+  .auth-title { font-size: 22px; }
+  .container { padding: 20px 16px 60px; }
+  .page-intro h1 { font-size: 24px; }
+}
