@@ -65,20 +65,14 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
 .hdr {
   background: var(--bg);
   border-bottom: 1px solid var(--line);
-  display: flex;
-  justify-content: center;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-.hdr__inner {
-  width: 100%;
-  max-width: 1120px;
   padding: 0 28px;
   height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 .hdr__brand {
   display: inline-flex;
@@ -116,10 +110,8 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
 .hdr__nav a:hover, .hdr__nav button:hover { color: var(--red); border-bottom-color: var(--red); }
 .hdr__nav a.active { border-bottom-color: var(--ink); color: var(--ink); }
 /* コンテンツ最上部のログイン中ユーザー表示（クリック不可・静的表示） */
-/* ヘッダーの .hdr__inner と同じ max-width で揃える */
+/* 全幅・ヘッダーと同じ 28px padding。右端がログアウトと同じ縦ラインで揃う */
 .who-bar {
-  max-width: 1120px;
-  margin: 0 auto;
   padding: 22px 28px 0;
   display: flex;
   justify-content: flex-end;
@@ -264,8 +256,6 @@ input:focus, textarea:focus, select:focus {
 
 /* ---------- レイアウト ---------- */
 .container {
-  max-width: 1120px;
-  margin: 0 auto;
   padding: 8px 28px 96px;
 }
 .auth-wrap {
@@ -470,7 +460,7 @@ tr:last-child td { border-bottom: none; }
 }
 
 @media (max-width: 640px) {
-  .hdr__inner { padding: 0 18px; height: 56px; }
+  .hdr { padding: 0 18px; height: 56px; }
   .hdr__brand { font-size: 18px; }
   .hdr__nav { gap: 14px; }
   .who-bar { padding: 16px 18px 0; }
