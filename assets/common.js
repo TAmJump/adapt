@@ -93,11 +93,13 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
 
   const headerHtml = `
     <header class="hdr">
-      <a href="index.html" class="hdr__brand">
-        Adapt
-        <span class="hdr__brand-sub">Platform Portal</span>
-      </a>
-      <nav class="hdr__nav">${navInner}</nav>
+      <div class="hdr__inner">
+        <a href="index.html" class="hdr__brand">
+          Adapt
+          <span class="hdr__brand-sub">Platform Portal</span>
+        </a>
+        <nav class="hdr__nav">${navInner}</nav>
+      </div>
     </header>
   `;
 
