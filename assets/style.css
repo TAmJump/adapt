@@ -110,11 +110,11 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
 .hdr__nav a:hover, .hdr__nav button:hover { color: var(--red); border-bottom-color: var(--red); }
 .hdr__nav a.active { border-bottom-color: var(--ink); color: var(--ink); }
 /* コンテンツ最上部のログイン中ユーザー表示（クリック不可・静的表示） */
-/* 全幅・ヘッダーと同じ 28px padding。右端がログアウトと同じ縦ラインで揃う */
+/* 左端揃え（ヘッダーのAdaptロゴと同じ縦ライン） */
 .who-bar {
-  padding: 22px 28px 0;
+  padding: 18px 28px 0;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 .hdr__who {
   font-family: 'JetBrains Mono', monospace;
