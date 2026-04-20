@@ -467,21 +467,36 @@ ${verifyUrl}
         const apiBase = app_name === 'onetouch' ? env.ONETOUCH_API_BASE : env.MEDADAPT_API_BASE;
         const loginPath = app_name === 'onetouch' ? '/api/auth/login' : '/auth/login';
         let verified = false, childCompany = null, childRole = null;
+        let debugInfo = { url: apiBase + loginPath, status: null, bodyPreview: null, verifiedBy: null };
         try {
           const resp = await fetch(apiBase + loginPath, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ login_id: child_login_id, password: child_password })
           });
+          debugInfo.status = resp.status;
+          const rawText = await resp.text();
+          debugInfo.bodyPreview = rawText.slice(0, 500);
           if (resp.ok) {
-            const data = await resp.json().catch(() => ({}));
-            verified = !!(data.token || data.user || data.ok || data.success);
-            childCompany = data.user?.company_code || data.company_code || data.user?.org_id || null;
+            let data = {};
+            try { data = JSON.parse(rawText); } catch {}
+            // より幅広くチェック：トークン系フィールド全般、user系、ok/success系
+            if (data.token) { verified = true; debugInfo.verifiedBy = 'token'; }
+            else if (data.access_token) { verified = true; debugInfo.verifiedBy = 'access_token'; }
+            else if (data.session_token) { verified = true; debugInfo.verifiedBy = 'session_token'; }
+            else if (data.user) { verified = true; debugInfo.verifiedBy = 'user'; }
+            else if (data.ok === true) { verified = true; debugInfo.verifiedBy = 'ok'; }
+            else if (data.success === true) { verified = true; debugInfo.verifiedBy = 'success'; }
+            else if (data.staff_id || data.user_id || data.id) { verified = true; debugInfo.verifiedBy = 'id_field'; }
+            childCompany = data.user?.company_code || data.company_code || data.user?.org_id || data.org_id || null;
             childRole    = data.user?.role || data.role || null;
           }
-        } catch (e) {}
+        } catch (e) {
+          debugInfo.fetchError = String(e.message || e);
+        }
+        console.log('LINK_DEBUG:', JSON.stringify({ app_name, child_login_id, debugInfo }));
 
-        if (!verified) return json({ error: 'child_auth_failed' }, 401, cors);
+        if (!verified) return json({ error: 'child_auth_failed', debug: debugInfo }, 401, cors);
 
         try {
           await db.prepare(
