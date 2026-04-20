@@ -109,17 +109,17 @@ a:hover { color: var(--red); text-decoration-color: var(--red); }
 }
 .hdr__nav a:hover, .hdr__nav button:hover { color: var(--red); border-bottom-color: var(--red); }
 .hdr__nav a.active { border-bottom-color: var(--ink); color: var(--ink); }
-/* ヘッダー下のサブバー（ログイン中ユーザー表示・クリック不可） */
-.hdr-subbar {
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-  padding: 8px 28px;
+/* コンテンツ最上部のログイン中ユーザー表示（クリック不可・静的表示） */
+.who-bar {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 28px 0;
   display: flex;
   justify-content: flex-end;
-  align-items: center;
-  position: sticky;
-  top: 64px;
-  z-index: 49;
+}
+.who-bar--auth {
+  max-width: 100%;
+  padding-top: 10px;
 }
 .hdr__who {
   font-family: 'JetBrains Mono', monospace;
@@ -263,7 +263,7 @@ input:focus, textarea:focus, select:focus {
 .container {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 40px 28px 96px;
+  padding: 20px 28px 96px;
 }
 .auth-wrap {
   min-height: calc(100vh - 64px);
@@ -468,13 +468,13 @@ tr:last-child td { border-bottom: none; }
 
 @media (max-width: 640px) {
   .hdr { padding: 0 18px; height: 56px; }
-  .hdr-subbar { padding: 6px 18px; top: 56px; }
   .hdr__brand { font-size: 18px; }
   .hdr__nav { gap: 14px; }
+  .who-bar { padding: 10px 18px 0; }
   .hdr__who { font-size: 10px; }
   .auth-card { padding: 32px 22px; }
   .auth-title { font-size: 23px; }
-  .container { padding: 24px 18px 64px; }
+  .container { padding: 14px 18px 64px; }
   .page-intro h1 { font-size: 26px; }
   .app-card { padding: 20px 22px; }
 }

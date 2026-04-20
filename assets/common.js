@@ -91,17 +91,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
       <a href="register.html">新規登録</a>
     `;
 
-  const subbar = (loggedIn && user)
-    ? `<div class="hdr-subbar">
-         <div class="hdr__who">
-           ${escapeHTML(user.login_id)}
-           <span class="hdr__who-sep">／</span>
-           <span class="hdr__who-name">${escapeHTML(user.name || '')}</span>
-         </div>
-       </div>`
-    : '';
-
-  const html = `
+  const headerHtml = `
     <header class="hdr">
       <a href="index.html" class="hdr__brand">
         Adapt
@@ -109,15 +99,35 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
       </a>
       <nav class="hdr__nav">${navInner}</nav>
     </header>
-    ${subbar}
   `;
+
   const holder = document.getElementById('adapt-header') || (() => {
     const d = document.createElement('div');
     d.id = 'adapt-header';
     document.body.prepend(d);
     return d;
   })();
-  holder.outerHTML = `<div id="adapt-header">${html}</div>`;
+  holder.outerHTML = `<div id="adapt-header">${headerHtml}</div>`;
+
+  // ログイン中はコンテンツ最上段にユーザー情報を表示
+  const existingWhoBar = document.getElementById('adapt-whobar');
+  if (existingWhoBar) existingWhoBar.remove();
+  if (loggedIn && user) {
+    // auth画面（.auth-wrap）の場合は full-width、通常はcontainer幅に合わせる
+    const isAuthPage = document.querySelector('.auth-wrap');
+    const whoBar = document.createElement('div');
+    whoBar.id = 'adapt-whobar';
+    whoBar.className = 'who-bar' + (isAuthPage ? ' who-bar--auth' : '');
+    whoBar.innerHTML = `
+      <div class="hdr__who">
+        ${escapeHTML(user.login_id)}
+        <span class="hdr__who-sep">／</span>
+        <span class="hdr__who-name">${escapeHTML(user.name || '')}</span>
+      </div>
+    `;
+    const headerEl = document.getElementById('adapt-header');
+    if (headerEl) headerEl.after(whoBar);
+  }
 
   const btn = document.getElementById('adaptLogoutBtn');
   if (btn) btn.addEventListener('click', async () => {
