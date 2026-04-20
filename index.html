@@ -14,7 +14,7 @@
   <section class="page-intro">
     <p class="section-label">Home</p>
     <h1 id="greet">ようこそ</h1>
-    <p>Adaptモジュールを一覧から選んで起動できます。モジュールを未連携の場合は「連携する」から既存のアカウントを紐付けてください。</p>
+    <p>モジュールを選んで起動できます。未連携のモジュールは「連携する」から紐付けてください。</p>
   </section>
 
   <div id="msg"></div>
@@ -79,7 +79,7 @@
   grid.innerHTML = Object.entries(apps).map(([key, a]) => {
     const linked = linkedSet[key];
     return `
-      <article class="app-card" data-app="${key}" style="--brand:${a.accent}">
+      <article class="app-card" data-app="${key}">
         <div class="app-card__head">
           <h3 class="app-card__name">${a.name}</h3>
           <span class="app-card__badge ${linked ? 'badge--linked' : 'badge--unlinked'}">

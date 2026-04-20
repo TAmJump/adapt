@@ -98,7 +98,7 @@
           <tbody>
             ${links.map(l => `
               <tr>
-                <td><span class="dot" style="--c:${l.app_name === 'onetouch' ? 'var(--onetouch)' : 'var(--medadapt)'};"></span>${l.app_name}</td>
+                <td>${l.app_name}</td>
                 <td class="mono">${Adapt.escapeHTML(l.child_login_id)}</td>
                 <td class="mono">${Adapt.escapeHTML(l.child_company_code || '-')}</td>
                 <td class="mono">${Adapt.escapeHTML(l.child_role || '-')}</td>

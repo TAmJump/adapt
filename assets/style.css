@@ -308,7 +308,6 @@ input:focus, textarea:focus, select:focus {
 .app-card {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-left: 4px solid var(--brand, var(--ink));
   border-radius: var(--radius-lg);
   padding: 24px 26px;
   display: flex;
@@ -321,7 +320,6 @@ input:focus, textarea:focus, select:focus {
 .app-card:hover {
   box-shadow: var(--shadow);
   border-color: var(--line-strong);
-  border-left-color: var(--brand, var(--ink));
 }
 .app-card[data-disabled="true"] { opacity: 0.55; }
 .app-card[data-disabled="true"]:hover { box-shadow: none; }
