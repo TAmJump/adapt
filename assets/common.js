@@ -109,15 +109,13 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   })();
   holder.outerHTML = `<div id="adapt-header">${headerHtml}</div>`;
 
-  // ログイン中はコンテンツ最上段にユーザー情報を表示
+  // ログイン中はヘッダー右端と縦ラインを揃えて、線の下・本文の上にユーザー情報を表示
   const existingWhoBar = document.getElementById('adapt-whobar');
   if (existingWhoBar) existingWhoBar.remove();
   if (loggedIn && user) {
-    // auth画面（.auth-wrap）の場合は full-width、通常はcontainer幅に合わせる
-    const isAuthPage = document.querySelector('.auth-wrap');
     const whoBar = document.createElement('div');
     whoBar.id = 'adapt-whobar';
-    whoBar.className = 'who-bar' + (isAuthPage ? ' who-bar--auth' : '');
+    whoBar.className = 'who-bar';
     whoBar.innerHTML = `
       <div class="hdr__who">
         ${escapeHTML(user.login_id)}
