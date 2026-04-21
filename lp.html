@@ -22,7 +22,25 @@
     border-bottom: 1px solid var(--line);
     max-width: 1200px;
     margin: 0 auto;
+    gap: 24px;
   }
+  .lp-nav__left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+  }
+  .lp-nav__back {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    border-right: 1px solid var(--line);
+    padding-right: 18px;
+    white-space: nowrap;
+  }
+  .lp-nav__back:hover { color: var(--red); }
   .lp-nav__brand {
     font-family: 'Zen Kaku Gothic New', sans-serif;
     font-size: 22px;
@@ -314,12 +332,57 @@
   }
   .lp-footer__links a:hover { color: var(--ink); }
 
+  /* ---------- Contact (before final CTA) ---------- */
+  .lp-contact {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 32px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+  }
+  .lp-contact__title {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: clamp(20px, 2.8vw, 26px);
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 12px 0;
+  }
+  .lp-contact__lead {
+    font-size: 13px;
+    line-height: 1.85;
+    color: var(--ink-muted);
+    margin: 0 0 24px 0;
+  }
+  .lp-contact__cta {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
   /* Mobile adjustments */
   @media (max-width: 640px) {
     .lp-hero { padding: 64px 24px 56px; }
     .lp-section { padding: 56px 24px; }
+    .lp-contact { padding: 48px 24px; }
     .lp-final { padding: 72px 24px 96px; }
-    .lp-nav { padding: 14px 20px; }
+    .lp-nav {
+      padding: 12px 20px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .lp-nav__left {
+      width: 100%;
+      gap: 14px;
+    }
+    .lp-nav__back {
+      padding-right: 14px;
+    }
+    .lp-nav__actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
   }
 </style>
 </head>
@@ -327,10 +390,13 @@
 
 <!-- Navbar -->
 <nav class="lp-nav">
-  <a href="lp.html" class="lp-nav__brand">
-    Adavoo
-    <span class="lp-nav__brand-sub">Vision Of Oneness</span>
-  </a>
+  <div class="lp-nav__left">
+    <a href="https://tamjump.com/" class="lp-nav__back">← タムジサイト</a>
+    <a href="lp.html" class="lp-nav__brand">
+      Adavoo
+      <span class="lp-nav__brand-sub">Vision Of Oneness</span>
+    </a>
+  </div>
   <div class="lp-nav__actions">
     <a href="login.html" class="lp-nav__link">ログイン</a>
     <a href="register.html" class="btn btn--primary btn--sm">新規登録</a>
@@ -456,6 +522,18 @@
   </div>
 </section>
 
+<!-- Contact -->
+<section class="lp-contact">
+  <h2 class="lp-contact__title">導入前のご相談・お見積り</h2>
+  <p class="lp-contact__lead">
+    代理店制度のご案内、導入ご検討、その他のご質問は、タムジ社の問合せ窓口までお気軽にお寄せください。
+  </p>
+  <div class="lp-contact__cta">
+    <a href="https://tamjump.com/contact.html" class="btn btn--primary" target="_blank" rel="noopener">タムジ社にお問合せ</a>
+    <a href="https://tamjump.com/" class="btn btn--ghost" target="_blank" rel="noopener">タムジサイトを見る</a>
+  </div>
+</section>
+
 <!-- Final CTA -->
 <section class="lp-final">
   <h2 class="lp-final__title">Vision Of Oneness を、<br>あなたの現場にも。</h2>
@@ -472,7 +550,8 @@
 <footer class="lp-footer">
   <div class="lp-footer__brand">ADAVOO ／ VISION OF ONENESS ／ © TAmJump</div>
   <div class="lp-footer__links">
-    <a href="https://tamjump.com/" target="_blank" rel="noopener">運営元</a>
+    <a href="https://tamjump.com/" target="_blank" rel="noopener">タムジサイト</a>
+    <a href="https://tamjump.com/contact.html" target="_blank" rel="noopener">お問合せ</a>
     <a href="login.html">ログイン</a>
     <a href="register.html">新規登録</a>
   </div>
