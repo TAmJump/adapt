@@ -192,6 +192,62 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   });
 }
 
+// 代理店画面用ヘッダー（Adapt 通常ヘッダーとは別系統・PartnerAPIを使用）
+function renderPartnerHeader({ active = '' } = {}) {
+  const p = PartnerAPI.getPartner();
+
+  const navInner = `
+    <a href="partner-dashboard.html" class="${active === 'dashboard' ? 'active' : ''}">ダッシュボード</a>
+    <button id="partnerLogoutBtn" type="button">ログアウト</button>
+  `;
+
+  const typeLabel = p?.type === 'super' ? '総代理店' : p?.type === 'agent' ? '代理店' : '';
+
+  const headerHtml = `
+    <header class="hdr">
+      <a href="partner-dashboard.html" class="hdr__brand">
+        Adapt
+        <span class="hdr__brand-sub">Partner Portal</span>
+      </a>
+      <nav class="hdr__nav">${navInner}</nav>
+    </header>
+  `;
+
+  const holder = document.getElementById('adapt-header') || (() => {
+    const d = document.createElement('div');
+    d.id = 'adapt-header';
+    document.body.prepend(d);
+    return d;
+  })();
+  holder.outerHTML = `<div id="adapt-header">${headerHtml}</div>`;
+
+  // ログイン情報バー（代理店コード＋会社名）
+  const existingWhoBar = document.getElementById('adapt-whobar');
+  if (existingWhoBar) existingWhoBar.remove();
+  if (p) {
+    const whoBar = document.createElement('div');
+    whoBar.id = 'adapt-whobar';
+    whoBar.className = 'who-bar';
+    whoBar.innerHTML = `
+      <div class="hdr__who">
+        <span class="mono">${escapeHTML(p.code)}</span>
+        <span class="hdr__who-sep">／</span>
+        <span class="hdr__who-name">${escapeHTML(p.company_name || '')}</span>
+        ${typeLabel ? `<span class="hdr__who-sep">／</span><span>${typeLabel}</span>` : ''}
+      </div>
+    `;
+    const headerEl = document.getElementById('adapt-header');
+    if (headerEl) headerEl.after(whoBar);
+  }
+
+  const btn = document.getElementById('partnerLogoutBtn');
+  if (btn) btn.addEventListener('click', async () => {
+    try { await PartnerAPI.call('/api/partner/logout', { method: 'POST' }); } catch {}
+    PartnerAPI.clear();
+    location.href = 'partner-login.html';
+  });
+}
+
 // パスワード表示トグル
 function bindPasswordToggles(root = document) {
   root.querySelectorAll('.pw-toggle').forEach(btn => {
@@ -230,4 +286,4 @@ function toast(msg, kind = 'info', ms = 3500) {
 
 window.AdaptAPI = AdaptAPI;
 window.PartnerAPI = PartnerAPI;
-window.Adapt = { requireLogin, requirePartnerLogin, renderHeader, escapeHTML, toast, bindPasswordToggles };
+window.Adapt = { requireLogin, requirePartnerLogin, renderHeader, renderPartnerHeader, escapeHTML, toast, bindPasswordToggles };

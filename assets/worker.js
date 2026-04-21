@@ -254,6 +254,15 @@ const nextStaffId = async (db) => {
   return 'ADP-STF-' + String(n).padStart(6, '0');
 };
 
+// 代理店（AGT-XXXXXX）の次の連番 — 総代理店が配下代理店を登録する際に使用
+const nextAgentId = async (db) => {
+  const row = await db.prepare(
+    "SELECT partner_id FROM partners WHERE type = 'agent' AND partner_id LIKE 'AGT-%' ORDER BY partner_id DESC LIMIT 1"
+  ).first();
+  const n = row ? parseInt(row.partner_id.replace('AGT-', ''), 10) + 1 : 1;
+  return 'AGT-' + String(n).padStart(6, '0');
+};
+
 // =========================================================
 //  メインハンドラ
 // =========================================================
@@ -798,6 +807,192 @@ ${verifyUrl}
             contract_end_at: p.contract_end_at,
             revenue_share_pct: p.revenue_share_pct,
             status: p.status
+          }
+        }, 200, cors);
+      }
+
+      // =============== 代理店ダッシュボード ===============
+
+      // ダッシュボード用サマリー集計
+      //   総代理店: 自分のコード + 配下代理店コード に紐づくエンドユーザー/売上
+      //   代理店  : 自分のコードのみに紐づくエンドユーザー/売上
+      if (path === '/api/partner/dashboard' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+
+        // 集計対象のコード一覧
+        let codes = [p.code];
+        let subAgentCount = 0;
+        if (p.type === 'super') {
+          const subs = await db.prepare(
+            "SELECT code FROM partners WHERE parent_partner_id = ? AND status != 'terminated'"
+          ).bind(p.partner_id).all();
+          const subCodes = (subs.results || []).map(x => x.code);
+          codes = codes.concat(subCodes);
+          // active の配下代理店のみカウント
+          const activeSubs = await db.prepare(
+            "SELECT COUNT(*) AS cnt FROM partners WHERE parent_partner_id = ? AND status = 'active'"
+          ).bind(p.partner_id).first();
+          subAgentCount = activeSubs?.cnt || 0;
+        }
+
+        // 配下エンドユーザー数（企業数）
+        const placeholders = codes.map(() => '?').join(',');
+        const customerCountRow = await db.prepare(
+          `SELECT COUNT(*) AS cnt FROM master_companies WHERE partner_code IN (${placeholders})`
+        ).bind(...codes).first();
+        const customerCount = customerCountRow?.cnt || 0;
+
+        // 配下エンドユーザーの有料契約数（subscriptions.status='active'）
+        const activeSubsCountRow = await db.prepare(
+          `SELECT COUNT(*) AS cnt FROM subscriptions WHERE partner_code IN (${placeholders}) AND status = 'active'`
+        ).bind(...codes).first();
+        const activeSubscriptionCount = activeSubsCountRow?.cnt || 0;
+
+        // 当月の売上台帳（revenue_ledger）— 総代理店の場合は自分のコードで集計（代理店経由分も集約されている）
+        const ym = new Date().toISOString().slice(0, 7); // YYYY-MM
+        let ledgerSummary = null;
+        if (p.type === 'super') {
+          const row = await db.prepare(
+            "SELECT COUNT(*) AS count, COALESCE(SUM(gross_amount),0) AS gross, COALESCE(SUM(share_amount),0) AS share " +
+            "FROM revenue_ledger WHERE partner_code = ? AND year_month = ?"
+          ).bind(p.code, ym).first();
+          ledgerSummary = {
+            year_month: ym,
+            entry_count: row?.count || 0,
+            gross_amount: row?.gross || 0,
+            share_amount: row?.share || 0
+          };
+        }
+
+        return json({
+          ok: true,
+          partner: {
+            partner_id: p.partner_id,
+            type: p.type,
+            company_name: p.company_name,
+            code: p.code,
+            contract_start_at: p.contract_start_at,
+            contract_end_at: p.contract_end_at
+          },
+          summary: {
+            customer_count: customerCount,
+            active_subscription_count: activeSubscriptionCount,
+            sub_agent_count: p.type === 'super' ? subAgentCount : null,
+            current_month_ledger: ledgerSummary  // 代理店はnull（タムジは総代理店にしか支払わないため）
+          }
+        }, 200, cors);
+      }
+
+      // 配下エンドユーザー一覧
+      //   総代理店: 自コード + 配下代理店コード に紐づく master_companies
+      //   代理店  : 自コードに紐づく master_companies
+      if (path === '/api/partner/customers' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+
+        let codes = [p.code];
+        if (p.type === 'super') {
+          const subs = await db.prepare(
+            "SELECT code FROM partners WHERE parent_partner_id = ? AND status != 'terminated'"
+          ).bind(p.partner_id).all();
+          codes = codes.concat((subs.results || []).map(x => x.code));
+        }
+
+        const placeholders = codes.map(() => '?').join(',');
+        const rows = await db.prepare(
+          `SELECT c.company_id, c.name, c.email, c.phone, c.partner_code, c.partner_code_locked_at, c.created_at,
+                  (SELECT COUNT(*) FROM master_staff WHERE master_company_id = c.company_id) AS staff_count,
+                  (SELECT COUNT(*) FROM subscriptions WHERE master_company_id = c.company_id AND status = 'active') AS active_subs
+             FROM master_companies c
+            WHERE c.partner_code IN (${placeholders})
+            ORDER BY c.created_at DESC`
+        ).bind(...codes).all();
+
+        return json({
+          ok: true,
+          customers: rows.results || [],
+          my_code: p.code,
+          is_super: p.type === 'super'
+        }, 200, cors);
+      }
+
+      // 配下代理店一覧（総代理店のみ）
+      if (path === '/api/partner/sub-agents' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+        if (p.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+
+        // 各代理店の配下エンドユーザー数もまとめて返す
+        const rows = await db.prepare(
+          "SELECT a.partner_id, a.code, a.company_name, a.login_id, a.email, a.phone, " +
+          "       a.contract_start_at, a.contract_end_at, a.status, a.created_at, " +
+          "       (SELECT COUNT(*) FROM master_companies mc WHERE mc.partner_code = a.code) AS customer_count " +
+          "  FROM partners a " +
+          " WHERE a.parent_partner_id = ? " +
+          " ORDER BY a.created_at DESC"
+        ).bind(p.partner_id).all();
+
+        return json({ ok: true, sub_agents: rows.results || [] }, 200, cors);
+      }
+
+      // 配下代理店を新規登録（総代理店のみ）
+      if (path === '/api/partner/sub-agents' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+        if (p.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+
+        const b = (await request.json()) || {};
+        const { company_name, login_id, password, email, phone } = b;
+        if (!company_name || !login_id || !password) {
+          return json({ error: 'missing_fields', fields: ['company_name','login_id','password'].filter(k => !b?.[k]) }, 400, cors);
+        }
+        if (password.length < 8) return json({ error: 'password_too_short' }, 400, cors);
+        if (!/^[a-zA-Z0-9_-]{3,40}$/.test(login_id)) {
+          return json({ error: 'invalid_login_id' }, 400, cors);
+        }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return json({ error: 'invalid_email' }, 400, cors);
+        }
+
+        // login_id 重複チェック（partners 全体でユニーク）
+        const exists = await db.prepare("SELECT 1 FROM partners WHERE login_id = ?").bind(login_id).first();
+        if (exists) return json({ error: 'login_id_taken' }, 409, cors);
+
+        const agentId = await nextAgentId(db);
+        const passwordHash = await sha256(password);
+        const now = nowISO();
+        // 代理店の契約期間は登録日から1年（総代理店の残り期間に合わせるロジックはPhase 3c以降で検討）
+        const oneYearLater = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+        await db.prepare(
+          "INSERT INTO partners (partner_id, type, parent_partner_id, company_name, code, login_id, password_hash, " +
+          "  email, phone, contract_start_at, contract_end_at, status) " +
+          "VALUES (?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')"
+        ).bind(
+          agentId, p.partner_id, company_name, agentId, login_id, passwordHash,
+          email || null, phone || null, now, oneYearLater
+        ).run();
+
+        await audit(db, 'sub_agent_created', null, p.login_id, {
+          parent_partner_id: p.partner_id, new_agent_id: agentId, login_id
+        }, request);
+
+        return json({
+          ok: true,
+          sub_agent: {
+            partner_id: agentId,
+            code: agentId,
+            company_name,
+            login_id,
+            email: email || null,
+            contract_start_at: now,
+            contract_end_at: oneYearLater,
+            status: 'active'
           }
         }, 200, cors);
       }

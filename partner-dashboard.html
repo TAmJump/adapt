@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>代理店ダッシュボード｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 8px 0 4px 0;
+  }
+  .metric {
+    border: 1px solid var(--line, #e3e3e0);
+    border-radius: 6px;
+    padding: 14px 16px;
+    background: #fff;
+  }
+  .metric__label {
+    font-size: 12px;
+    color: #666;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .metric__value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0a0e1a;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric__unit {
+    font-size: 12px;
+    color: #666;
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 9000;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal {
+    background: #fff; border-radius: 8px; padding: 24px 28px;
+    max-width: 460px; width: calc(100% - 32px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal h3 { margin: 0 0 16px 0; font-size: 16px; }
+  .modal .modal-actions {
+    display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px;
+  }
+  .credentials-box {
+    background: #fff8e1;
+    border: 1px solid #f7c85c;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin: 12px 0;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .credentials-box .mono { font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="container">
+  <section class="page-intro">
+    <p class="section-label">Partner Dashboard</p>
+    <h1>代理店ダッシュボード</h1>
+    <p id="pageSubtitle">読み込み中…</p>
+  </section>
+
+  <div class="stack">
+
+    <!-- サマリーメトリクス -->
+    <section class="card">
+      <h2 class="panel-title">サマリー</h2>
+      <div id="summaryContent">
+        <p class="muted">読み込み中…</p>
+      </div>
+    </section>
+
+    <!-- 自分の情報 -->
+    <section class="card">
+      <h2 class="panel-title">代理店情報</h2>
+      <table id="selfTbl"></table>
+    </section>
+
+    <!-- 配下代理店（総代理店のみ表示） -->
+    <section class="card" id="subAgentsCard" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h2 class="panel-title" style="margin:0;">配下代理店</h2>
+        <button class="btn btn--primary btn--sm" id="addAgentBtn" type="button">＋ 配下代理店を登録</button>
+      </div>
+      <div id="subAgentsContent"></div>
+    </section>
+
+    <!-- 配下エンドユーザー -->
+    <section class="card">
+      <h2 class="panel-title">配下エンドユーザー</h2>
+      <div id="customersContent"></div>
+    </section>
+
+  </div>
+</main>
+
+<!-- 配下代理店登録モーダル -->
+<div id="modalWrap" style="display:none;"></div>
+
+<script src="assets/common.js"></script>
+<script>
+(async function () {
+  // 代理店ログインチェック
+  const r = await Adapt.requirePartnerLogin('partner-login.html');
+  if (!r) return;
+  Adapt.renderPartnerHeader({ active: 'dashboard' });
+
+  const p = r.partner;
+  const isSuper = p.type === 'super';
+
+  document.getElementById('pageSubtitle').textContent =
+    (isSuper ? '総代理店' : '代理店') + ' / ' + p.company_name;
+
+  // --- 自分の情報テーブル ---
+  document.getElementById('selfTbl').innerHTML = `
+    <tr><th style="width:180px">代理店コード</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
+    <tr><th>種別</th><td>${isSuper ? '総代理店' : '代理店'}</td></tr>
+    <tr><th>会社名</th><td>${Adapt.escapeHTML(p.company_name)}</td></tr>
+    <tr><th>ログインID</th><td class="mono">${Adapt.escapeHTML(p.login_id)}</td></tr>
+    <tr><th>メール</th><td>${Adapt.escapeHTML(p.email || '-')}</td></tr>
+    <tr><th>電話</th><td>${Adapt.escapeHTML(p.phone || '-')}</td></tr>
+    <tr><th>契約開始日</th><td class="mono">${formatDate(p.contract_start_at)}</td></tr>
+    <tr><th>契約終了予定日</th><td class="mono">${formatDate(p.contract_end_at)}</td></tr>
+    ${p.parent ? `<tr><th>所属総代理店</th><td><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</td></tr>` : ''}
+    ${isSuper && p.revenue_share_pct != null ? `<tr><th>按分率（タムジ→自社）</th><td class="mono">${p.revenue_share_pct}%</td></tr>` : ''}
+  `;
+
+  // --- サマリー取得 ---
+  const summaryEl = document.getElementById('summaryContent');
+  try {
+    const s = await PartnerAPI.call('/api/partner/dashboard');
+    const sm = s.summary;
+    const ledger = sm.current_month_ledger;
+    const metrics = [];
+    metrics.push(`
+      <div class="metric">
+        <div class="metric__label">配下エンドユーザー</div>
+        <div class="metric__value">${sm.customer_count}<span class="metric__unit">社</span></div>
+      </div>`);
+    metrics.push(`
+      <div class="metric">
+        <div class="metric__label">有料契約中</div>
+        <div class="metric__value">${sm.active_subscription_count}<span class="metric__unit">件</span></div>
+      </div>`);
+    if (isSuper && sm.sub_agent_count != null) {
+      metrics.push(`
+        <div class="metric">
+          <div class="metric__label">配下代理店</div>
+          <div class="metric__value">${sm.sub_agent_count}<span class="metric__unit">社</span></div>
+        </div>`);
+    }
+    if (isSuper && ledger) {
+      metrics.push(`
+        <div class="metric">
+          <div class="metric__label">当月売上（${ledger.year_month}）</div>
+          <div class="metric__value">¥${ledger.gross_amount.toLocaleString()}</div>
+        </div>`);
+      metrics.push(`
+        <div class="metric">
+          <div class="metric__label">当月支払予定（按分後）</div>
+          <div class="metric__value">¥${ledger.share_amount.toLocaleString()}</div>
+        </div>`);
+    }
+    summaryEl.innerHTML = `<div class="metric-grid">${metrics.join('')}</div>
+      ${!isSuper ? '<p class="muted" style="font-size:12px; margin:10px 0 0 0;">売上情報は総代理店から共有されます（タムジ社台帳は表示されません）。</p>' : ''}`;
+  } catch (e) {
+    summaryEl.innerHTML = `<div class="msg msg--err">サマリー取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+  }
+
+  // --- 配下代理店一覧（総代理店のみ） ---
+  if (isSuper) {
+    document.getElementById('subAgentsCard').style.display = '';
+    loadSubAgents();
+    document.getElementById('addAgentBtn').addEventListener('click', openAddAgentModal);
+  }
+
+  async function loadSubAgents() {
+    const el = document.getElementById('subAgentsContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await PartnerAPI.call('/api/partner/sub-agents');
+      const list = r.sub_agents || [];
+      if (list.length === 0) {
+        el.innerHTML = `<p class="muted">まだ配下代理店が登録されていません。右上の「＋ 配下代理店を登録」から追加してください。</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>コード</th><th>会社名</th><th>ログインID</th><th>メール</th>
+            <th>配下ユーザー</th><th>契約終了</th><th>状態</th>
+          </tr></thead>
+          <tbody>
+            ${list.map(a => `
+              <tr>
+                <td class="mono">${Adapt.escapeHTML(a.code)}</td>
+                <td>${Adapt.escapeHTML(a.company_name)}</td>
+                <td class="mono">${Adapt.escapeHTML(a.login_id)}</td>
+                <td>${Adapt.escapeHTML(a.email || '-')}</td>
+                <td class="mono">${a.customer_count}社</td>
+                <td class="mono">${formatDate(a.contract_end_at)}</td>
+                <td>${statusLabel(a.status)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  // --- 配下エンドユーザー一覧 ---
+  (async function loadCustomers() {
+    const el = document.getElementById('customersContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await PartnerAPI.call('/api/partner/customers');
+      const list = r.customers || [];
+      if (list.length === 0) {
+        el.innerHTML = `<p class="muted">配下エンドユーザーはまだいません。代理店コードを案内して登録してもらってください。</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>会社ID</th><th>会社名</th><th>メール</th>
+            <th>紐付けコード</th><th>スタッフ数</th><th>有料契約</th><th>登録日</th>
+          </tr></thead>
+          <tbody>
+            ${list.map(c => `
+              <tr>
+                <td class="mono">${Adapt.escapeHTML(c.company_id)}</td>
+                <td>${Adapt.escapeHTML(c.name)}</td>
+                <td>${Adapt.escapeHTML(c.email || '-')}</td>
+                <td class="mono">${Adapt.escapeHTML(c.partner_code || '-')}</td>
+                <td class="mono">${c.staff_count}</td>
+                <td class="mono">${c.active_subs}</td>
+                <td class="mono">${formatDate(c.created_at)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  })();
+
+  // --- 配下代理店登録モーダル ---
+  function openAddAgentModal() {
+    const wrap = document.getElementById('modalWrap');
+    wrap.style.display = '';
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="modalBackdrop">
+        <div class="modal" id="modalBox">
+          <h3>配下代理店を登録</h3>
+          <p class="muted" style="font-size:12px; margin:0 0 12px 0;">
+            登録後、ここに表示される<strong>代理店コード・ログインID・初期パスワード</strong>を相手先にお伝えください。
+          </p>
+          <div id="agentFormMsg"></div>
+          <form id="agentForm" class="stack" novalidate>
+            <div class="field">
+              <label for="agCompany">会社名 <span class="req">*</span></label>
+              <input id="agCompany" type="text" required maxlength="120" />
+            </div>
+            <div class="field">
+              <label for="agLoginId">ログインID <span class="req">*</span></label>
+              <input id="agLoginId" type="text" required />
+              <div class="hint">3〜40文字の半角英数字・<code>-</code>・<code>_</code></div>
+            </div>
+            <div class="field">
+              <label for="agPassword">初期パスワード <span class="req">*</span></label>
+              <div class="pw-wrap">
+                <input id="agPassword" type="password" required minlength="8" />
+                <button type="button" class="pw-toggle" data-pw="agPassword">表示</button>
+              </div>
+              <div class="hint">8文字以上（代理店側で変更可能）</div>
+            </div>
+            <div class="field">
+              <label for="agEmail">メール</label>
+              <input id="agEmail" type="email" />
+            </div>
+            <div class="field">
+              <label for="agPhone">電話</label>
+              <input id="agPhone" type="tel" />
+            </div>
+          </form>
+          <div class="modal-actions">
+            <button class="btn btn--ghost" id="agentCancelBtn" type="button">キャンセル</button>
+            <button class="btn btn--primary" id="agentSubmitBtn" type="button">登録する</button>
+          </div>
+        </div>
+      </div>
+    `;
+    Adapt.bindPasswordToggles();
+    document.getElementById('agentCancelBtn').addEventListener('click', closeModal);
+    document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'modalBackdrop') closeModal();
+    });
+    document.getElementById('agentSubmitBtn').addEventListener('click', submitAgent);
+  }
+
+  function closeModal() {
+    const wrap = document.getElementById('modalWrap');
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+  }
+
+  async function submitAgent() {
+    const msgEl = document.getElementById('agentFormMsg');
+    const btn   = document.getElementById('agentSubmitBtn');
+    msgEl.innerHTML = '';
+    const body = {
+      company_name: document.getElementById('agCompany').value.trim(),
+      login_id: document.getElementById('agLoginId').value.trim(),
+      password: document.getElementById('agPassword').value,
+      email: document.getElementById('agEmail').value.trim() || undefined,
+      phone: document.getElementById('agPhone').value.trim() || undefined
+    };
+    if (!body.company_name || !body.login_id || !body.password) {
+      msgEl.innerHTML = '<div class="msg msg--err">必須項目を入力してください。</div>';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = '登録中…';
+    try {
+      const r = await PartnerAPI.call('/api/partner/sub-agents', { method: 'POST', body });
+      showCredentials(r.sub_agent, body.password);
+      loadSubAgents();
+    } catch (e) {
+      const map = {
+        login_id_taken: 'このログインIDは既に使われています。',
+        password_too_short: 'パスワードは8文字以上にしてください。',
+        invalid_login_id: 'ログインIDの形式が正しくありません。',
+        invalid_email: 'メールアドレスの形式が正しくありません。',
+        forbidden_super_only: '配下代理店の登録は総代理店のみ可能です。',
+        missing_fields: '必須項目を入力してください。'
+      };
+      msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = '登録する';
+    }
+  }
+
+  function showCredentials(agent, plainPassword) {
+    const wrap = document.getElementById('modalWrap');
+    wrap.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal">
+          <h3>登録完了</h3>
+          <p>配下代理店を登録しました。以下の情報を相手先にお伝えください。</p>
+          <div class="credentials-box">
+            <div>代理店コード: <span class="mono">${Adapt.escapeHTML(agent.code)}</span></div>
+            <div>ログインID: <span class="mono">${Adapt.escapeHTML(agent.login_id)}</span></div>
+            <div>初期パスワード: <span class="mono">${Adapt.escapeHTML(plainPassword)}</span></div>
+            <div style="margin-top:6px; font-size:11px; color:#8a6400;">
+              ※ このパスワードは再表示されません。必ずコピーして控えてください。
+            </div>
+          </div>
+          <p style="font-size:12px; color:#555;">
+            代理店側のログインURL: <br>
+            <a href="partner-login.html" target="_blank" class="mono" style="word-break:break-all;">${location.origin}/partner-login.html</a>
+          </p>
+          <div class="modal-actions">
+            <button class="btn btn--primary" id="credOkBtn" type="button">閉じる</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('credOkBtn').addEventListener('click', closeModal);
+  }
+
+  // --- ユーティリティ ---
+  function formatDate(s) {
+    if (!s) return '-';
+    const d = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+  function statusLabel(s) {
+    const map = { active: '稼働中', pending: '承認待ち', expired: '契約終了', terminated: '停止' };
+    return map[s] || s;
+  }
+})();
+</script>
+</body>
+</html>
