@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>モジュール購入｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  .plan-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin: 12px 0;
+  }
+  .plan-card {
+    border: 1px solid var(--line, #e3e3e0);
+    border-radius: 8px;
+    padding: 18px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .plan-card:hover { border-color: #c4432b; box-shadow: 0 4px 16px rgba(196,67,43,0.1); }
+  .plan-card.selected { border-color: #c4432b; border-width: 2px; }
+  .plan-card__name { font-weight: 700; font-size: 15px; margin: 0 0 4px 0; }
+  .plan-card__price { font-size: 22px; font-weight: 700; color: #c4432b; margin: 8px 0; }
+  .plan-card__price-unit { font-size: 12px; color: #666; font-weight: 400; margin-left: 4px; }
+  .plan-card__desc { font-size: 12px; color: #555; line-height: 1.65; }
+
+  #card-container {
+    border: 1px solid var(--line, #e3e3e0);
+    border-radius: 6px;
+    padding: 16px;
+    background: #fff;
+    min-height: 90px;
+  }
+  .total-box {
+    background: #fafafa;
+    border: 1px solid var(--line, #e3e3e0);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    font-size: 13px;
+    line-height: 1.9;
+  }
+  .total-box .total-amount {
+    font-size: 20px;
+    font-weight: 700;
+    color: #c4432b;
+    margin-left: 8px;
+  }
+  .step-indicator {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+  .step-indicator span {
+    padding: 4px 12px;
+    border-radius: 100px;
+    background: #f0f0f0;
+    color: #666;
+  }
+  .step-indicator span.active {
+    background: #c4432b;
+    color: white;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="container">
+  <section class="page-intro">
+    <p class="section-label">Purchase</p>
+    <h1>モジュール購入</h1>
+    <p>利用するモジュールとプランを選択してください</p>
+  </section>
+
+  <div class="stack">
+
+    <section class="card">
+      <div class="step-indicator">
+        <span id="step1" class="active">1. プラン選択</span>
+        <span id="step2">2. 決済情報入力</span>
+        <span id="step3">3. 確認・購入</span>
+      </div>
+
+      <!-- Step 1: プラン選択 -->
+      <div id="planSelectStep">
+        <h2 class="panel-title">プランを選択</h2>
+        <div id="plansContent" class="plan-grid">
+          <p class="muted">読み込み中…</p>
+        </div>
+
+        <div id="seatCountSection" style="display:none; margin-top:16px;">
+          <div class="field" style="max-width:300px;">
+            <label for="seatCount">購入ID数 <span class="req">*</span></label>
+            <input id="seatCount" type="number" min="1" max="100" value="1" />
+            <div class="hint">IDあたりの課金です（1〜100）</div>
+          </div>
+          <div class="total-box">
+            合計：<span class="total-amount" id="totalDisplay">¥0</span>/月
+          </div>
+          <button class="btn btn--primary" id="proceedToPayBtn" type="button">決済情報入力へ進む</button>
+        </div>
+      </div>
+
+      <!-- Step 2: 決済情報入力 -->
+      <div id="paymentStep" style="display:none;">
+        <h2 class="panel-title">決済情報</h2>
+        <div id="squareStatus"></div>
+        <div style="max-width:500px;">
+          <div class="field">
+            <label>クレジットカード情報</label>
+            <div id="card-container"></div>
+          </div>
+          <div id="payMsg"></div>
+          <div style="display:flex; gap:8px; margin-top:16px;">
+            <button class="btn btn--ghost" id="backToPlanBtn" type="button">戻る</button>
+            <button class="btn btn--primary" id="submitPayBtn" type="button" disabled>購入を確定する</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: 完了 -->
+      <div id="doneStep" style="display:none;">
+        <h2 class="panel-title">購入完了</h2>
+        <div class="msg msg--ok" style="margin-bottom:16px;">
+          ご購入ありがとうございます。モジュールの利用を開始できます。
+        </div>
+        <p>確認メールをご登録のアドレスに送信しました（Square発行）。<br>
+           ホーム画面からモジュールをご利用ください。</p>
+        <a class="btn btn--primary" href="index.html">ホームへ</a>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script src="assets/common.js"></script>
+<script src="https://web.squarecdn.com/v1/square.js"></script>
+<script>
+(async function () {
+  const session = await Adapt.requireLogin('login.html');
+  if (!session) return;
+  Adapt.renderHeader({ loggedIn: true });
+
+  let selectedPlan = null;
+  let seatCount = 1;
+  let squareConfig = null;
+  let card = null;
+
+  // プラン一覧取得
+  try {
+    const r = await AdaptAPI.call('/api/subscriptions/plans');
+    renderPlans(r.plans || []);
+  } catch (e) {
+    document.getElementById('plansContent').innerHTML =
+      `<div class="msg msg--err">プラン取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    return;
+  }
+
+  // Square設定取得
+  try {
+    const r = await AdaptAPI.call('/api/subscriptions/config');
+    squareConfig = r.configured ? r.square : null;
+  } catch {
+    squareConfig = null;
+  }
+
+  function renderPlans(plans) {
+    const el = document.getElementById('plansContent');
+    if (plans.length === 0) { el.innerHTML = '<p class="muted">利用可能なプランがありません。</p>'; return; }
+    el.innerHTML = plans.map(p => `
+      <div class="plan-card" data-plan-id="${Adapt.escapeHTML(p.id)}">
+        <div class="plan-card__name">${Adapt.escapeHTML(p.name)}</div>
+        <div class="plan-card__price">¥${p.unit_price.toLocaleString()}<span class="plan-card__price-unit">/ ID / 月</span></div>
+        <div class="plan-card__desc">${Adapt.escapeHTML(p.description)}</div>
+      </div>
+    `).join('');
+    el.querySelectorAll('.plan-card').forEach(card => {
+      card.addEventListener('click', () => {
+        el.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        const id = card.dataset.planId;
+        selectedPlan = plans.find(p => p.id === id);
+        document.getElementById('seatCountSection').style.display = '';
+        updateTotal();
+      });
+    });
+    document.getElementById('seatCount').addEventListener('input', updateTotal);
+  }
+
+  function updateTotal() {
+    if (!selectedPlan) return;
+    seatCount = Math.max(1, Math.min(100, parseInt(document.getElementById('seatCount').value || 1, 10)));
+    document.getElementById('totalDisplay').textContent =
+      '¥' + (selectedPlan.unit_price * seatCount).toLocaleString();
+  }
+
+  // Step遷移
+  document.getElementById('proceedToPayBtn').addEventListener('click', async () => {
+    if (!selectedPlan) return;
+    setStep(2);
+    await initSquareCard();
+  });
+  document.getElementById('backToPlanBtn').addEventListener('click', () => setStep(1));
+
+  function setStep(n) {
+    ['planSelectStep','paymentStep','doneStep'].forEach((id, i) => {
+      document.getElementById(id).style.display = (i === n - 1) ? '' : 'none';
+    });
+    ['step1','step2','step3'].forEach((id, i) => {
+      document.getElementById(id).classList.toggle('active', i === n - 1);
+    });
+  }
+
+  // Square Web Payments SDK 初期化
+  async function initSquareCard() {
+    const statusEl = document.getElementById('squareStatus');
+    if (!squareConfig) {
+      statusEl.innerHTML = `
+        <div class="msg msg--err">
+          Square決済は現在設定されていません。管理者にお問い合わせください。<br>
+          （管理者向け: <code>CRON_SETUP.md</code> および <code>SQUARE_SETUP.md</code> を参照）
+        </div>`;
+      return;
+    }
+    if (!window.Square) {
+      statusEl.innerHTML = `<div class="msg msg--err">Square SDK の読み込みに失敗しました。ネットワーク接続をご確認ください。</div>`;
+      return;
+    }
+    try {
+      const payments = window.Square.payments(squareConfig.application_id, squareConfig.location_id);
+      card = await payments.card();
+      await card.attach('#card-container');
+      document.getElementById('submitPayBtn').disabled = false;
+    } catch (e) {
+      statusEl.innerHTML = `<div class="msg msg--err">Square初期化失敗: ${Adapt.escapeHTML(String(e.message||e))}</div>`;
+    }
+  }
+
+  // 購入確定
+  document.getElementById('submitPayBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('submitPayBtn');
+    const msg = document.getElementById('payMsg');
+    msg.innerHTML = '';
+    btn.disabled = true;
+    btn.textContent = '処理中…';
+    try {
+      if (!card) throw new Error('Square SDKが初期化されていません');
+      const tokenResult = await card.tokenize();
+      if (tokenResult.status !== 'OK') {
+        throw new Error('カード情報のトークン化に失敗しました: ' + (tokenResult.errors?.[0]?.message || 'unknown'));
+      }
+      // Adapt Workerに送信（Worker側でSquare Subscriptions APIを呼び出す想定）
+      const r = await AdaptAPI.call('/api/subscriptions/create', {
+        method: 'POST',
+        body: {
+          app_name: selectedPlan.app_name,
+          plan: selectedPlan.plan,
+          seat_count: seatCount,
+          unit_price: selectedPlan.unit_price,
+          square_card_token: tokenResult.token
+        }
+      });
+      setStep(3);
+    } catch (e) {
+      msg.innerHTML = `<div class="msg msg--err">${Adapt.escapeHTML(e.message || String(e))}</div>`;
+      btn.disabled = false;
+      btn.textContent = '購入を確定する';
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

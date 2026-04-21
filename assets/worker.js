@@ -486,6 +486,48 @@ async function runCleanupExpiredTokens(db) {
   };
 }
 
+// =========================================================
+//  Square 決済連携（Phase 3f）
+//
+//  必要な環境変数:
+//    SQUARE_ACCESS_TOKEN          (Secret)   Square API呼び出し用
+//    SQUARE_LOCATION_ID           (Plain)    拠点ID
+//    SQUARE_WEBHOOK_SIGNATURE_KEY (Secret)   Webhook署名検証用
+//    SQUARE_APPLICATION_ID        (Plain)    フロント Web Payments SDK用
+//    SQUARE_ENV                   (Plain)    'sandbox' | 'production'
+// =========================================================
+
+// 利用可能なプラン一覧（Phase 3f初期版・ハードコード）
+// 将来的にはD1のテーブル化も検討（設計書 Phase 4 の宿題）
+const AVAILABLE_PLANS = [
+  { id: 'onetouch_pro',   app_name: 'onetouch', plan: 'pro',  name: 'OneTouchAdapt Pro',  unit_price: 3000, description: '施設設備管理・QR台帳（IDあたり月額）' },
+  { id: 'medadapt_pro',   app_name: 'medadapt', plan: 'pro',  name: 'MedAdapt Pro',       unit_price: 5000, description: '医療介護法人間連携OS（IDあたり月額）' }
+];
+
+// Square Webhook 署名検証
+// Squareは「notification URL + request body」をHMAC-SHA256でハッシュしてBase64で送ってくる
+// ヘッダ: x-square-hmacsha256-signature
+async function verifySquareWebhookSignature(request, rawBody, signatureKey, notificationUrl) {
+  const signature = request.headers.get('x-square-hmacsha256-signature');
+  if (!signature || !signatureKey) return false;
+
+  const payload = notificationUrl + rawBody;
+  const keyBuf = new TextEncoder().encode(signatureKey);
+  const key = await crypto.subtle.importKey('raw', keyBuf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  // Base64エンコード
+  const sigArr = new Uint8Array(sigBuf);
+  let binary = '';
+  for (let i = 0; i < sigArr.length; i++) binary += String.fromCharCode(sigArr[i]);
+  const expected = btoa(binary);
+
+  // 定数時間比較
+  if (signature.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < signature.length; i++) diff |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1557,6 +1599,109 @@ ${verifyUrl}
           active: !!sub,
           subscription: sub || null
         }, 200, cors);
+      }
+
+      // =============== Square 決済連携（Phase 3f） ===============
+
+      // 購入可能なプラン一覧
+      if (path === '/api/subscriptions/plans' && method === 'GET') {
+        return json({ ok: true, plans: AVAILABLE_PLANS }, 200, cors);
+      }
+
+      // フロント用設定値（Web Payments SDK 初期化に必要）
+      // 認証不要（Square Application ID とロケーションIDは公開情報扱い）
+      if (path === '/api/subscriptions/config' && method === 'GET') {
+        return json({
+          ok: true,
+          square: {
+            application_id: env.SQUARE_APPLICATION_ID || null,
+            location_id:    env.SQUARE_LOCATION_ID    || null,
+            env:            env.SQUARE_ENV || 'sandbox'
+          },
+          configured: !!(env.SQUARE_APPLICATION_ID && env.SQUARE_LOCATION_ID)
+        }, 200, cors);
+      }
+
+      // Square Webhook受信エンドポイント
+      //
+      //  Squareから送信される主要イベント:
+      //    - subscription.created
+      //    - subscription.updated
+      //    - invoice.payment_made
+      //    - invoice.published
+      //    - invoice.scheduled_charge_failed
+      //
+      //  認証: x-square-hmacsha256-signature ヘッダで署名検証
+      if (path === '/api/subscriptions/webhook' && method === 'POST') {
+        const rawBody = await request.text();
+        const notificationUrl = env.SQUARE_WEBHOOK_NOTIFICATION_URL ||
+          `${new URL(request.url).origin}/api/subscriptions/webhook`;
+
+        // 署名検証
+        const sigKey = env.SQUARE_WEBHOOK_SIGNATURE_KEY;
+        if (!sigKey) {
+          // 未設定時は安全側で拒否（ただしログは残す）
+          await audit(db, 'square_webhook_no_key', null, null, { notification_url: notificationUrl }, request);
+          return json({ error: 'webhook_not_configured' }, 500, cors);
+        }
+        const valid = await verifySquareWebhookSignature(request, rawBody, sigKey, notificationUrl);
+        if (!valid) {
+          await audit(db, 'square_webhook_invalid_sig', null, null, { bodyPreview: rawBody.slice(0, 200) }, request);
+          return json({ error: 'invalid_signature' }, 401, cors);
+        }
+
+        let event;
+        try { event = JSON.parse(rawBody); } catch {
+          return json({ error: 'invalid_json' }, 400, cors);
+        }
+
+        const eventType = event.type;
+        const data = event.data?.object;
+
+        try {
+          // subscription.created / updated → subscriptions テーブルの status 反映
+          if ((eventType === 'subscription.created' || eventType === 'subscription.updated') && data?.subscription) {
+            const sq = data.subscription;
+            const squareStatus = sq.status; // 'PENDING' | 'ACTIVE' | 'CANCELED' | 'DEACTIVATED'
+            const mapStatus = squareStatus === 'ACTIVE' ? 'active'
+                          : squareStatus === 'CANCELED' ? 'expired'
+                          : squareStatus === 'DEACTIVATED' ? 'expired'
+                          : 'pending';
+            // square_subscription_id で検索して更新
+            const existing = await db.prepare(
+              "SELECT subscription_id FROM subscriptions WHERE square_subscription_id = ?"
+            ).bind(sq.id).first();
+            if (existing) {
+              await db.prepare(
+                "UPDATE subscriptions SET status = ?, updated_at = datetime('now') WHERE subscription_id = ?"
+              ).bind(mapStatus, existing.subscription_id).run();
+            }
+          }
+
+          // invoice.payment_made → next_billing_at 更新（Adapt側では決済完了の記録まで）
+          if (eventType === 'invoice.payment_made' && data?.invoice) {
+            const inv = data.invoice;
+            const subId = inv.subscription_id;
+            if (subId) {
+              await db.prepare(
+                "UPDATE subscriptions SET status = 'active', updated_at = datetime('now') WHERE square_subscription_id = ?"
+              ).bind(subId).run();
+            }
+          }
+
+          await audit(db, 'square_webhook', null, null, {
+            event_id: event.event_id,
+            type: eventType,
+            object_id: data?.subscription?.id || data?.invoice?.id || null
+          }, request);
+        } catch (e) {
+          await audit(db, 'square_webhook_error', null, null, {
+            event_id: event.event_id, type: eventType, error: String(e.message || e)
+          }, request);
+        }
+
+        // Square の仕様上、2xx返せば再送されない
+        return json({ ok: true, received: eventType }, 200, cors);
       }
 
       return json({ error: 'not_found', path, method }, 404, cors);
