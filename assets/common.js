@@ -198,6 +198,7 @@ function renderPartnerHeader({ active = '' } = {}) {
 
   const navInner = `
     <a href="partner-dashboard.html" class="${active === 'dashboard' ? 'active' : ''}">ダッシュボード</a>
+    <a href="partner-account.html" class="${active === 'account' ? 'active' : ''}">アカウント</a>
     <button id="partnerLogoutBtn" type="button">ログアウト</button>
   `;
 

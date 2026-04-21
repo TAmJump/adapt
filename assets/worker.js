@@ -516,14 +516,16 @@ async function runCleanupExpiredTokens(db) {
     db.prepare("DELETE FROM email_verifications WHERE expires_at < ? AND used_at IS NULL").bind(nowIso),
     db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso),
     db.prepare("DELETE FROM partner_sessions WHERE expires_at < ?").bind(nowIso),
-    db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(nowIso)
+    db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(nowIso),
+    db.prepare("DELETE FROM partner_password_reset_tokens WHERE expires_at < ?").bind(nowIso)
   ]);
   return {
     sso_tickets_deleted: results[0].meta?.changes || 0,
     email_verifications_deleted: results[1].meta?.changes || 0,
     sessions_deleted: results[2].meta?.changes || 0,
     partner_sessions_deleted: results[3].meta?.changes || 0,
-    password_reset_tokens_deleted: results[4].meta?.changes || 0
+    password_reset_tokens_deleted: results[4].meta?.changes || 0,
+    partner_password_reset_tokens_deleted: results[5].meta?.changes || 0
   };
 }
 
@@ -1267,6 +1269,208 @@ ${resetUrl}
             contract_end_at: p.contract_end_at,
             revenue_share_pct: p.revenue_share_pct,
             status: p.status
+          }
+        }, 200, cors);
+      }
+
+      // =============== 代理店パスワード変更・リセット（Phase 4-2） ===============
+
+      // ログイン中の代理店によるパスワード変更
+      //  - 現在のパスワード検証 + 新パスワードで上書き
+      //  - 他セッションを全破棄（現在のセッションは維持）
+      if (path === '/api/partner/change-password' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const { old_password, new_password } = (await request.json()) || {};
+        if (!old_password || !new_password) return json({ error: 'missing_fields' }, 400, cors);
+        if (new_password.length < 8) return json({ error: 'password_too_short' }, 400, cors);
+
+        const oldHash = await sha256(old_password);
+        const check = await db.prepare(
+          "SELECT 1 FROM partners WHERE partner_id = ? AND password_hash = ?"
+        ).bind(r.partner.partner_id, oldHash).first();
+        if (!check) return json({ error: 'wrong_password' }, 401, cors);
+
+        const newHash = await sha256(new_password);
+
+        // 現在のトークン（変更後も維持）
+        const currentAuth = request.headers.get('X-Partner-Authorization') || '';
+        const currentToken = currentAuth.startsWith('Bearer ') ? currentAuth.slice(7) : null;
+
+        await db.batch([
+          db.prepare("UPDATE partners SET password_hash = ?, updated_at = datetime('now') WHERE partner_id = ?")
+            .bind(newHash, r.partner.partner_id),
+          // 他セッションを全削除（現セッションのみ残す）
+          db.prepare("DELETE FROM partner_sessions WHERE partner_id = ? AND token != ?")
+            .bind(r.partner.partner_id, currentToken || '')
+        ]);
+
+        await audit(db, 'partner_password_change', null, r.partner.login_id,
+          { partner_id: r.partner.partner_id }, request);
+        return json({ ok: true }, 200, cors);
+      }
+
+      // パスワードリセットのリクエスト（代理店）
+      //  - email 存在不問で常に 200 OK（アカウント列挙攻撃対策）
+      //  - partners.email に対して送信
+      if (path === '/api/partner/password-reset-request' && method === 'POST') {
+        const b = await request.json();
+        const { email } = b || {};
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return json({ error: 'invalid_email' }, 400, cors);
+        }
+
+        const p = await db.prepare(
+          "SELECT partner_id, login_id, company_name, email, status FROM partners WHERE email = ? AND status = 'active'"
+        ).bind(email).first();
+
+        // 存在しない場合も成功レスポンス（情報漏洩防止）
+        if (!p) {
+          await audit(db, 'partner_password_reset_requested_unknown', null, null,
+            { email: email.slice(0, 64) }, request);
+          return json({ ok: true, message: 'if_exists_email_sent' }, 200, cors);
+        }
+
+        // 同一partnerの未使用トークン削除（多重発行防止）
+        await db.prepare(
+          "DELETE FROM partner_password_reset_tokens WHERE partner_id = ? AND used_at IS NULL"
+        ).bind(p.partner_id).run();
+
+        const token = randomId(48);
+        const expiresAt = plusSec(60 * 60); // 1時間
+
+        await db.prepare(
+          "INSERT INTO partner_password_reset_tokens (token, partner_id, email, expires_at) VALUES (?,?,?,?)"
+        ).bind(token, p.partner_id, email, expiresAt).run();
+
+        const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
+        const resetUrl = `${baseUrl}/partner-reset-password.html?token=${token}`;
+
+        try {
+          await sendEmail(env, {
+            to: email,
+            subject: '【Adavoo Partner Portal】パスワード再設定のご案内',
+            html: passwordResetEmailHtml({ name: p.company_name, resetUrl, loginId: p.login_id }),
+            text:
+`${p.company_name} 御中
+
+Adavoo 代理店アカウントのパスワード再設定リクエストを受け付けました。
+以下のURLを開いて、新しいパスワードを設定してください。
+
+${resetUrl}
+
+有効期限: 1時間
+ログインID: ${p.login_id}
+
+このリクエストに心当たりがない場合、このメールは無視してください。
+パスワードは変更されません。
+
+※ パスワードを変更した場合、全ての端末から自動的にログアウトされます。`
+          });
+          await audit(db, 'partner_password_reset_requested', null, p.login_id,
+            { partner_id: p.partner_id, email }, request);
+        } catch (e) {
+          await audit(db, 'partner_password_reset_mail_fail', null, p.login_id,
+            { partner_id: p.partner_id, error: String(e.message || e).slice(0, 200) }, request);
+        }
+
+        return json({ ok: true, message: 'if_exists_email_sent' }, 200, cors);
+      }
+
+      // リセットトークン情報取得（partner-reset-password.html 表示用）
+      if (path === '/api/partner/password-reset-info' && method === 'GET') {
+        const token = url.searchParams.get('token');
+        if (!token) return json({ error: 'missing_token' }, 400, cors);
+        const row = await db.prepare(
+          "SELECT prt.token, prt.partner_id, prt.email, prt.expires_at, prt.used_at, " +
+          "       p.login_id, p.company_name, p.type, p.status " +
+          "  FROM partner_password_reset_tokens prt " +
+          "  JOIN partners p ON prt.partner_id = p.partner_id " +
+          " WHERE prt.token = ?"
+        ).bind(token).first();
+        if (!row) return json({ error: 'invalid_token' }, 404, cors);
+        if (row.used_at) return json({ error: 'already_used' }, 410, cors);
+        if (new Date(row.expires_at) < new Date()) return json({ error: 'expired' }, 410, cors);
+        if (row.status !== 'active') return json({ error: 'partner_suspended' }, 403, cors);
+
+        const maskEmail = (e) => {
+          const m = String(e || '').match(/^([^@]+)@(.+)$/);
+          if (!m) return '';
+          const [, local, domain] = m;
+          const masked = local.length <= 2 ? local[0] + '*' : local[0] + '***' + local[local.length - 1];
+          return `${masked}@${domain}`;
+        };
+
+        return json({
+          ok: true,
+          login_id: row.login_id,
+          company_name: row.company_name,
+          partner_type: row.type,
+          email_masked: maskEmail(row.email),
+          expires_at: row.expires_at
+        }, 200, cors);
+      }
+
+      // リセット確定: 新パスワード設定 + 全セッション破棄 + 新セッション発行（自動ログイン）
+      if (path === '/api/partner/password-reset-confirm' && method === 'POST') {
+        const { token, new_password } = (await request.json()) || {};
+        if (!token || !new_password) return json({ error: 'missing_fields' }, 400, cors);
+        if (new_password.length < 8) return json({ error: 'password_too_short' }, 400, cors);
+
+        const row = await db.prepare(
+          "SELECT * FROM partner_password_reset_tokens WHERE token = ?"
+        ).bind(token).first();
+        if (!row) return json({ error: 'invalid_token' }, 404, cors);
+        if (row.used_at) return json({ error: 'already_used' }, 410, cors);
+        if (new Date(row.expires_at) < new Date()) return json({ error: 'expired' }, 410, cors);
+
+        const p = await db.prepare(
+          "SELECT * FROM partners WHERE partner_id = ?"
+        ).bind(row.partner_id).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (p.status !== 'active') return json({ error: 'partner_suspended' }, 403, cors);
+
+        const newHash = await sha256(new_password);
+        const newSessionToken = randomId(48);
+        const sessionExpires = plusSec(60 * 60 * 24 * 30);
+
+        // 一括処理:
+        // 1. パスワード更新
+        // 2. 既存セッション全削除（全端末ログアウト）
+        // 3. リセットトークンを used に
+        // 4. 新セッション発行（自動ログイン用）
+        await db.batch([
+          db.prepare("UPDATE partners SET password_hash = ?, updated_at = datetime('now') WHERE partner_id = ?")
+            .bind(newHash, p.partner_id),
+          db.prepare("DELETE FROM partner_sessions WHERE partner_id = ?").bind(p.partner_id),
+          db.prepare("UPDATE partner_password_reset_tokens SET used_at = datetime('now') WHERE token = ?").bind(token),
+          db.prepare("INSERT INTO partner_sessions (token, partner_id, expires_at) VALUES (?,?,?)")
+            .bind(newSessionToken, p.partner_id, sessionExpires)
+        ]);
+
+        // 他の未使用トークンも無効化（横流し対策）
+        await db.prepare(
+          "UPDATE partner_password_reset_tokens SET used_at = datetime('now') WHERE partner_id = ? AND used_at IS NULL AND token != ?"
+        ).bind(p.partner_id, token).run();
+
+        await audit(db, 'partner_password_reset_completed', null, p.login_id,
+          { partner_id: p.partner_id }, request);
+
+        return json({
+          ok: true,
+          token: newSessionToken,
+          expires_at: sessionExpires,
+          partner: {
+            partner_id: p.partner_id,
+            type: p.type,
+            parent_partner_id: p.parent_partner_id,
+            company_name: p.company_name,
+            code: p.code,
+            login_id: p.login_id,
+            email: p.email,
+            contract_start_at: p.contract_start_at,
+            contract_end_at: p.contract_end_at,
+            revenue_share_pct: p.revenue_share_pct
           }
         }, 200, cors);
       }

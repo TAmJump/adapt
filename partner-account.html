@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>アカウント設定｜Adavoo Partner</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="page-wrap">
+  <p class="breadcrumb" id="crumb"></p>
+  <p class="eyebrow">PARTNER ACCOUNT</p>
+  <h1 class="page-title">アカウント設定</h1>
+  <p class="page-sub" id="pageSubtitle"></p>
+
+  <div id="bodyContent">
+    <p class="muted">読み込み中…</p>
+  </div>
+</main>
+
+<script src="assets/common.js"></script>
+<script>
+(async function () {
+  const r = await Adapt.requirePartnerLogin('partner-login.html');
+  if (!r) return;
+
+  Adapt.renderPartnerHeader({ active: 'account' });
+  Adapt.bindPasswordToggles();
+
+  const p = r.partner;
+  const isSuper = p.type === 'super';
+
+  document.getElementById('crumb').innerHTML =
+    `<span class="mono">${Adapt.escapeHTML(p.code)}</span> <span class="crumb-sep">/</span> ${Adapt.escapeHTML(p.company_name)} <span class="crumb-sep">/</span> アカウント設定`;
+  document.getElementById('pageSubtitle').textContent =
+    (isSuper ? '総代理店' : '代理店') + ' / ' + p.company_name;
+
+  const body = document.getElementById('bodyContent');
+  body.innerHTML = `
+    <section class="card">
+      <h2 class="panel-title">アカウント情報</h2>
+      <table class="info-table">
+        <tr><th style="width:180px">${isSuper ? '総代理店コード' : '代理店コード'}</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
+        <tr><th>種別</th><td>${isSuper ? '総代理店' : '代理店'}</td></tr>
+        <tr><th>会社名</th><td>${Adapt.escapeHTML(p.company_name)}</td></tr>
+        <tr><th>ログインID</th><td class="mono">${Adapt.escapeHTML(p.login_id)}</td></tr>
+        <tr><th>メール</th><td>${Adapt.escapeHTML(p.email || '-')}</td></tr>
+        <tr><th>電話</th><td>${Adapt.escapeHTML(p.phone || '-')}</td></tr>
+      </table>
+      <p class="muted" style="font-size:12px; margin:14px 0 0 0;">
+        会社名・メール・電話の変更はタムジ社（info@tamjump.com）までご連絡ください。
+      </p>
+    </section>
+
+    <section class="card">
+      <h2 class="panel-title">パスワード変更</h2>
+      <div id="pwMsg"></div>
+      <form id="pwForm" class="stack" autocomplete="on" novalidate style="max-width:440px;">
+        <div class="field">
+          <label for="oldPw">現在のパスワード</label>
+          <div class="pw-wrap">
+            <input id="oldPw" type="password" required autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-pw="oldPw">表示</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="newPw">新しいパスワード</label>
+          <div class="pw-wrap">
+            <input id="newPw" type="password" required minlength="8" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-pw="newPw">表示</button>
+          </div>
+          <div class="hint">8文字以上</div>
+        </div>
+        <div class="field">
+          <label for="newPw2">新しいパスワード（確認）</label>
+          <div class="pw-wrap">
+            <input id="newPw2" type="password" required minlength="8" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-pw="newPw2">表示</button>
+          </div>
+        </div>
+        <button class="btn btn--primary" id="pwSubmitBtn" type="submit">パスワードを変更する</button>
+      </form>
+      <p class="muted" style="font-size:12px; margin:14px 0 0 0;">
+        変更するとこの端末以外の全ログインセッションは失効します。<br>
+        パスワードを忘れた場合は、一度ログアウトして<a href="partner-forgot-password.html">パスワード再設定</a>をご利用ください。
+      </p>
+    </section>
+  `;
+
+  Adapt.bindPasswordToggles();
+
+  document.getElementById('pwForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('pwMsg');
+    const btn = document.getElementById('pwSubmitBtn');
+    msg.innerHTML = '';
+    const oldPw = document.getElementById('oldPw').value;
+    const pw1 = document.getElementById('newPw').value;
+    const pw2 = document.getElementById('newPw2').value;
+    if (pw1 !== pw2) {
+      msg.innerHTML = '<div class="msg msg--err">新しいパスワードが一致しません。</div>';
+      return;
+    }
+    if (pw1 === oldPw) {
+      msg.innerHTML = '<div class="msg msg--err">新しいパスワードは現在のものと異なるものにしてください。</div>';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = '変更中…';
+    try {
+      await PartnerAPI.call('/api/partner/change-password', {
+        method: 'POST',
+        body: { old_password: oldPw, new_password: pw1 }
+      });
+      msg.innerHTML = '<div class="msg msg--ok">パスワードを変更しました。他の端末のセッションは失効しました。</div>';
+      document.getElementById('pwForm').reset();
+    } catch (e) {
+      const map = {
+        missing_fields:     '入力を確認してください。',
+        password_too_short: '新しいパスワードは8文字以上にしてください。',
+        wrong_password:     '現在のパスワードが違います。',
+        unauthorized:       'セッションが切れています。再ログインしてください。',
+        invalid_token:      'セッションが切れています。再ログインしてください。',
+        expired:            'セッションの有効期限が切れています。再ログインしてください。',
+        partner_suspended:  'この代理店アカウントは利用停止中です。'
+      };
+      msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'パスワードを変更する';
+    }
+  });
+})();
+</script>
+</body>
+</html>
