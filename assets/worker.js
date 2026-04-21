@@ -479,17 +479,18 @@ ${verifyUrl}
             var resp = await fetch(apiBase + loginPath, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ login_id: child_login_id, loginId: child_login_id, password: child_password })
+              body: JSON.stringify({ login_id: child_login_id, loginId: child_login_id, email: child_login_id, password: child_password })
             });
           } else {
             // Service Binding経由。ホスト名はダミー（Service Bindingが上書きする）
-            // bodyは子API側のフィールド名差異を吸収するため両形式で送信
+            // bodyは子API側のフィールド名差異を吸収するため3形式で送信
             // - OneTouchAdapt: loginId (camelCase)
-            // - MedAdapt: login_id (snake_case)
+            // - MedAdapt: email (ADM-/STF-プレフィックスのlogin_idもemailフィールドで受ける設計)
+            // - 予備: login_id (snake_case)
             var resp = await svc.fetch('https://internal' + loginPath, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ login_id: child_login_id, loginId: child_login_id, password: child_password })
+              body: JSON.stringify({ login_id: child_login_id, loginId: child_login_id, email: child_login_id, password: child_password })
             });
           }
           debugInfo.status = resp.status;
