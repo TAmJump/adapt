@@ -168,6 +168,45 @@ function verifyEmailHtml({ name, verifyUrl, companyName }) {
 </body></html>`;
 }
 
+function passwordResetEmailHtml({ name, resetUrl, loginId }) {
+  const esc = (s) => String(s || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+  return `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"></head>
+<body style="font-family: 'Helvetica Neue', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background:#ffffff; color:#0a0e1a; margin:0; padding:0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; margin:0 auto; padding:32px 20px;">
+    <tr><td>
+      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">Adavoo</h1>
+      <p style="font-family:monospace; font-size:11px; color:#5a6070; letter-spacing:0.12em; text-transform:uppercase; margin:0 0 28px 0;">Password Reset</p>
+      <h2 style="font-size:18px; font-weight:700; margin:0 0 14px 0;">パスワード再設定のご案内</h2>
+      <p style="font-size:14px; line-height:1.8; color:#2a2f3d; margin:0 0 20px 0;">
+        ${esc(name)} 様<br><br>
+        Adavooアカウントのパスワード再設定リクエストを受け付けました。<br>
+        以下のボタンから新しいパスワードを設定してください。
+      </p>
+      <table cellpadding="0" cellspacing="0" style="margin:8px 0 28px 0;"><tr>
+        <td style="background:#c4432b; border-radius:2px;">
+          <a href="${resetUrl}" style="display:inline-block; padding:13px 28px; color:#ffffff; font-weight:700; font-size:13px; letter-spacing:0.06em; text-decoration:none;">パスワードを再設定する</a>
+        </td>
+      </tr></table>
+      <p style="font-size:11px; color:#5a6070; line-height:1.8; margin:0 0 16px 0;">
+        ボタンが押せない場合は以下のURLをブラウザに貼り付けてください：<br>
+        <a href="${resetUrl}" style="color:#c4432b; word-break:break-all;">${esc(resetUrl)}</a>
+      </p>
+      <hr style="border:0; border-top:1px solid #e3e3e0; margin:24px 0;">
+      <table style="font-size:11px; color:#5a6070; line-height:1.8;">
+        <tr><td style="padding-right:16px;">ログインID</td><td style="color:#0a0e1a;" class="mono">${esc(loginId)}</td></tr>
+        <tr><td style="padding-right:16px;">有効期限</td><td>発行から1時間</td></tr>
+      </table>
+      <p style="font-size:11px; color:#9aa0ac; margin:18px 0 0 0;">
+        このリクエストに心当たりがない場合、このメールは無視してください。パスワードは変更されません。<br>
+        なお、パスワードを変更した場合、全ての端末から自動的にログアウトされます。<br>
+        このアドレスには返信できません。
+      </p>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
 // =========================================================
 //  認証系ヘルパー
 // =========================================================
@@ -476,13 +515,15 @@ async function runCleanupExpiredTokens(db) {
     db.prepare("DELETE FROM sso_tickets WHERE expires_at < ?").bind(nowIso),
     db.prepare("DELETE FROM email_verifications WHERE expires_at < ? AND used_at IS NULL").bind(nowIso),
     db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso),
-    db.prepare("DELETE FROM partner_sessions WHERE expires_at < ?").bind(nowIso)
+    db.prepare("DELETE FROM partner_sessions WHERE expires_at < ?").bind(nowIso),
+    db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(nowIso)
   ]);
   return {
     sso_tickets_deleted: results[0].meta?.changes || 0,
     email_verifications_deleted: results[1].meta?.changes || 0,
     sessions_deleted: results[2].meta?.changes || 0,
-    partner_sessions_deleted: results[3].meta?.changes || 0
+    partner_sessions_deleted: results[3].meta?.changes || 0,
+    password_reset_tokens_deleted: results[4].meta?.changes || 0
   };
 }
 
@@ -788,6 +829,163 @@ ${verifyUrl}
         ).bind(newHash, r.user.staff_id).run();
         await audit(db, 'password_change', r.user.staff_id, r.user.login_id, null, request);
         return json({ ok: true }, 200, cors);
+      }
+
+      // =============== Password Reset (Phase 4-1) ===============
+
+      // パスワードリセットのリクエスト
+      //  - email 存在不問で常に 200 OK を返す（アカウント列挙攻撃防止）
+      //  - メール送信失敗は内部ログのみ記録、レスポンスには出さない
+      if (path === '/api/auth/password-reset-request' && method === 'POST') {
+        const b = await request.json();
+        const { email } = b || {};
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return json({ error: 'invalid_email' }, 400, cors);
+        }
+
+        const user = await db.prepare(
+          "SELECT staff_id, login_id, name, email, status FROM master_staff WHERE email = ? AND status = 'active'"
+        ).bind(email).first();
+
+        // ユーザーが存在しない場合も、存在する場合と同じレスポンスを返す
+        if (!user) {
+          await audit(db, 'password_reset_requested_unknown', null, null, { email: email.slice(0, 64) }, request);
+          return json({ ok: true, message: 'if_exists_email_sent' }, 200, cors);
+        }
+
+        // 同一staffの未使用リセットトークンを先に削除（多重発行防止）
+        await db.prepare(
+          "DELETE FROM password_reset_tokens WHERE staff_id = ? AND used_at IS NULL"
+        ).bind(user.staff_id).run();
+
+        const token = randomId(48);
+        const expiresAt = plusSec(60 * 60); // 1時間
+
+        await db.prepare(
+          "INSERT INTO password_reset_tokens (token, staff_id, email, expires_at) VALUES (?,?,?,?)"
+        ).bind(token, user.staff_id, email, expiresAt).run();
+
+        const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
+        const resetUrl = `${baseUrl}/reset-password.html?token=${token}`;
+
+        try {
+          await sendEmail(env, {
+            to: email,
+            subject: '【Adavoo】パスワード再設定のご案内',
+            html: passwordResetEmailHtml({ name: user.name, resetUrl, loginId: user.login_id }),
+            text:
+`${user.name} 様
+
+Adavooアカウントのパスワード再設定リクエストを受け付けました。
+以下のURLを開いて、新しいパスワードを設定してください。
+
+${resetUrl}
+
+有効期限: 1時間
+ログインID: ${user.login_id}
+
+このリクエストに心当たりがない場合、このメールは無視してください。
+パスワードは変更されません。
+
+※ パスワードを変更した場合、全ての端末から自動的にログアウトされます。`
+          });
+          await audit(db, 'password_reset_requested', user.staff_id, user.login_id, { email }, request);
+        } catch (e) {
+          // 送信失敗もログには残すが、レスポンスは成功扱い（攻撃者が成否を区別できないように）
+          await audit(db, 'password_reset_mail_fail', user.staff_id, user.login_id,
+            { error: String(e.message || e).slice(0, 200) }, request);
+        }
+
+        return json({ ok: true, message: 'if_exists_email_sent' }, 200, cors);
+      }
+
+      // リセットトークンの情報取得（reset-password.html 表示用）
+      if (path === '/api/auth/password-reset-info' && method === 'GET') {
+        const token = url.searchParams.get('token');
+        if (!token) return json({ error: 'missing_token' }, 400, cors);
+        const row = await db.prepare(
+          "SELECT prt.token, prt.staff_id, prt.email, prt.expires_at, prt.used_at, " +
+          "       u.login_id, u.name, u.status " +
+          "  FROM password_reset_tokens prt " +
+          "  JOIN master_staff u ON prt.staff_id = u.staff_id " +
+          " WHERE prt.token = ?"
+        ).bind(token).first();
+        if (!row) return json({ error: 'invalid_token' }, 404, cors);
+        if (row.used_at) return json({ error: 'already_used' }, 410, cors);
+        if (new Date(row.expires_at) < new Date()) return json({ error: 'expired' }, 410, cors);
+        if (row.status !== 'active') return json({ error: 'account_suspended' }, 403, cors);
+
+        // 表示用にメールをマスク（p***@example.com）
+        const maskEmail = (e) => {
+          const m = String(e || '').match(/^([^@]+)@(.+)$/);
+          if (!m) return '';
+          const [, local, domain] = m;
+          const masked = local.length <= 2 ? local[0] + '*' : local[0] + '***' + local[local.length - 1];
+          return `${masked}@${domain}`;
+        };
+
+        return json({
+          ok: true,
+          login_id: row.login_id,
+          name: row.name,
+          email_masked: maskEmail(row.email),
+          expires_at: row.expires_at
+        }, 200, cors);
+      }
+
+      // リセット確定: 新パスワード設定 + 全セッション破棄 + 新セッション発行
+      if (path === '/api/auth/password-reset-confirm' && method === 'POST') {
+        const { token, new_password } = (await request.json()) || {};
+        if (!token || !new_password) return json({ error: 'missing_fields' }, 400, cors);
+        if (new_password.length < 8) return json({ error: 'password_too_short' }, 400, cors);
+
+        const row = await db.prepare(
+          "SELECT * FROM password_reset_tokens WHERE token = ?"
+        ).bind(token).first();
+        if (!row) return json({ error: 'invalid_token' }, 404, cors);
+        if (row.used_at) return json({ error: 'already_used' }, 410, cors);
+        if (new Date(row.expires_at) < new Date()) return json({ error: 'expired' }, 410, cors);
+
+        const user = await db.prepare(
+          "SELECT staff_id, login_id, name, email, role, master_company_id, status FROM master_staff WHERE staff_id = ?"
+        ).bind(row.staff_id).first();
+        if (!user) return json({ error: 'user_not_found' }, 404, cors);
+        if (user.status !== 'active') return json({ error: 'account_suspended' }, 403, cors);
+
+        const newHash = await sha256(new_password);
+        const newSessionToken = randomId(48);
+        const sessionExpires = plusSec(60 * 60 * 24 * 30);
+
+        // 一括処理:
+        // 1. パスワード更新
+        // 2. 既存セッション全削除（セキュリティ: 全端末からログアウト）
+        // 3. リセットトークンを used に
+        // 4. 新セッション発行（自動ログイン用）
+        await db.batch([
+          db.prepare("UPDATE master_staff SET password_hash = ?, updated_at = datetime('now') WHERE staff_id = ?")
+            .bind(newHash, user.staff_id),
+          db.prepare("DELETE FROM sessions WHERE staff_id = ?").bind(user.staff_id),
+          db.prepare("UPDATE password_reset_tokens SET used_at = datetime('now') WHERE token = ?").bind(token),
+          db.prepare("INSERT INTO sessions (token, staff_id, expires_at) VALUES (?,?,?)")
+            .bind(newSessionToken, user.staff_id, sessionExpires)
+        ]);
+
+        // 同時に古いパスワードリセットトークンもすべて無効化（別トークンを横流しで悪用されるのを防ぐ）
+        await db.prepare(
+          "UPDATE password_reset_tokens SET used_at = datetime('now') WHERE staff_id = ? AND used_at IS NULL AND token != ?"
+        ).bind(user.staff_id, token).run();
+
+        await audit(db, 'password_reset_completed', user.staff_id, user.login_id, null, request);
+
+        return json({
+          ok: true,
+          token: newSessionToken,
+          expires_at: sessionExpires,
+          user: {
+            staff_id: user.staff_id, login_id: user.login_id, name: user.name, email: user.email,
+            role: user.role, master_company_id: user.master_company_id
+          }
+        }, 200, cors);
       }
 
       // =============== モジュール連携 ===============
