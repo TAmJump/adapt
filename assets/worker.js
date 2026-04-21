@@ -464,16 +464,34 @@ ${verifyUrl}
         if (!app_name || !child_login_id || !child_password) return json({ error: 'missing_fields' }, 400, cors);
         if (!['onetouch', 'medadapt'].includes(app_name)) return json({ error: 'invalid_app' }, 400, cors);
 
-        const apiBase = app_name === 'onetouch' ? env.ONETOUCH_API_BASE : env.MEDADAPT_API_BASE;
+        // Service Binding経由で子Workerを呼び出す（Cloudflare Error 1042=同一ゾーンWorker間fetch制限の回避）
+        // env.ONETOUCH_SVC / env.MEDADAPT_SVC はCloudflareダッシュボードのService Bindingsで設定
+        const svc = app_name === 'onetouch' ? env.ONETOUCH_SVC : env.MEDADAPT_SVC;
         const loginPath = app_name === 'onetouch' ? '/api/auth/login' : '/auth/login';
         let verified = false, childCompany = null, childRole = null;
-        let debugInfo = { url: apiBase + loginPath, status: null, bodyPreview: null, verifiedBy: null };
+        let debugInfo = { url: loginPath, status: null, bodyPreview: null, verifiedBy: null, transport: 'service_binding' };
         try {
-          const resp = await fetch(apiBase + loginPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login_id: child_login_id, password: child_password })
-          });
+          if (!svc) {
+            // Service Bindingが未設定の場合は旧来のfetchにフォールバック（ローカル/開発用途）
+            const apiBase = app_name === 'onetouch' ? env.ONETOUCH_API_BASE : env.MEDADAPT_API_BASE;
+            debugInfo.transport = 'fetch_fallback';
+            debugInfo.url = apiBase + loginPath;
+            var resp = await fetch(apiBase + loginPath, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ login_id: child_login_id, loginId: child_login_id, password: child_password })
+            });
+          } else {
+            // Service Binding経由。ホスト名はダミー（Service Bindingが上書きする）
+            // bodyは子API側のフィールド名差異を吸収するため両形式で送信
+            // - OneTouchAdapt: loginId (camelCase)
+            // - MedAdapt: login_id (snake_case)
+            var resp = await svc.fetch('https://internal' + loginPath, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ login_id: child_login_id, loginId: child_login_id, password: child_password })
+            });
+          }
           debugInfo.status = resp.status;
           const rawText = await resp.text();
           debugInfo.bodyPreview = rawText.slice(0, 500);
