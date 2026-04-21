@@ -83,6 +83,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   const navInner = loggedIn
     ? `
       <a href="index.html"  class="${active === 'home'    ? 'active' : ''}">ホーム</a>
+      <a href="guide.html"  class="${active === 'guide'   ? 'active' : ''}">ガイド</a>
       <a href="account.html" class="${active === 'account' ? 'active' : ''}">アカウント</a>
       <button id="adaptLogoutBtn" type="button">ログアウト</button>
     `

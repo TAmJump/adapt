@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>ガイド｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  .step-num {
+    display: inline-block;
+    min-width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border: 1px solid var(--line-strong);
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 8px;
+    color: var(--ink);
+  }
+  .step-title {
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  .step-body {
+    color: var(--ink-muted);
+    font-size: 13px;
+    line-height: 1.7;
+    margin-left: 32px;
+  }
+  .step-body .code {
+    font-family: 'JetBrains Mono', monospace;
+    background: #f5f5f5;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .faq-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .faq-list > li {
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+  .faq-list > li:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .faq-q {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .faq-a {
+    color: var(--ink-muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .status-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="container">
+  <section class="page-intro">
+    <p class="section-label">Guide</p>
+    <h1>モジュール連携ガイド</h1>
+    <p>Adaptに既存のモジュール（OneTouchAdapt・MedAdapt）を紐付けて、1クリックで起動できるようにする手順です。</p>
+  </section>
+
+  <div class="stack">
+
+    <section class="card">
+      <h2 class="panel-title">はじめに</h2>
+      <p style="color:var(--ink-muted);font-size:13px;line-height:1.7;">
+        Adaptは各モジュールを束ねるポータルです。各モジュールを個別に開くのではなく、Adaptから連携してまとめて起動できます。<br>
+        一度連携すれば、以降はAdaptにログインするだけで、モジュール側のID・パスワード入力は不要になります。
+      </p>
+    </section>
+
+    <section class="card">
+      <h2 class="panel-title">連携前に用意するもの</h2>
+      <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;margin:0;">
+        <li>連携したいモジュールの<strong style="color:var(--ink);">ログインID</strong></li>
+        <li>連携したいモジュールの<strong style="color:var(--ink);">パスワード</strong></li>
+      </ul>
+      <p class="hint" style="margin-top:10px;">
+        モジュール側の契約・アカウントが先に必要です。未契約の場合は各モジュールのLPから申し込んでください。
+      </p>
+    </section>
+
+    <section class="card">
+      <h2 class="panel-title">連携の手順</h2>
+
+      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
+        <div class="step-title"><span class="step-num">1</span>ホーム画面を開く</div>
+        <div class="step-body">
+          Adaptにログイン後、<span class="code">ホーム</span>に各モジュールがカード形式で表示されます。
+        </div>
+      </div>
+
+      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
+        <div class="step-title"><span class="step-num">2</span>「連携する」ボタンを押す</div>
+        <div class="step-body">
+          未連携のモジュールカードには<span class="code">連携する</span>ボタンが表示されています。クリックすると連携用のダイアログが開きます。
+        </div>
+      </div>
+
+      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
+        <div class="step-title"><span class="step-num">3</span>モジュールのID・パスワードを入力</div>
+        <div class="step-body">
+          用意したモジュール側のログインID・パスワードを入力して送信します。<br>
+          入力されたパスワードはAdapt側には保存されません（認証確認にのみ使用）。
+        </div>
+      </div>
+
+      <div style="padding:14px 0;">
+        <div class="step-title"><span class="step-num">4</span>カードが <span class="status-pill">LINKED</span> に変われば完了</div>
+        <div class="step-body">
+          連携成功時、カード右上の表示が<span class="status-pill">NOT LINKED</span>から<span class="status-pill">LINKED</span>に変わります。
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="panel-title">連携後の使い方</h2>
+      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
+        <div class="step-title">開く</div>
+        <div class="step-body">
+          カードの<span class="code">開く</span>ボタンから、モジュールが自動ログイン状態で新しいタブに開きます。
+        </div>
+      </div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
+        <div class="step-title">LP（ランディングページ）</div>
+        <div class="step-body">
+          <span class="code">LP</span>ボタンから各モジュールの紹介ページを表示できます。
+        </div>
+      </div>
+      <div style="padding:14px 0;">
+        <div class="step-title">解除</div>
+        <div class="step-body">
+          <span class="code">解除</span>ボタンから連携解除ができます。モジュール側のデータは削除されません。再度連携すれば同じアカウントでそのまま使えます。
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="panel-title">よくある質問</h2>
+      <ul class="faq-list">
+        <li>
+          <div class="faq-q">連携に使えるIDを途中で変更できますか？</div>
+          <div class="faq-a">直接の変更はできません。一度<span class="code">解除</span>してから、新しいIDで再連携してください。</div>
+        </li>
+        <li>
+          <div class="faq-q">同じモジュールに複数のIDを紐付けできますか？</div>
+          <div class="faq-a">1つのAdaptアカウントにつき、各モジュール1IDまでです。複数のアカウントを切り替えて使いたい場合は、モジュール側の通常ログインをお使いください。</div>
+        </li>
+        <li>
+          <div class="faq-q">連携解除するとモジュール側のデータは消えますか？</div>
+          <div class="faq-a">消えません。Adaptの連携情報のみが削除され、モジュール側のアカウント・データはそのまま残ります。</div>
+        </li>
+        <li>
+          <div class="faq-q">パスワードを変更したら連携し直しが必要ですか？</div>
+          <div class="faq-a">不要です。連携時はパスワードを保存しておらず、以降は内部チケット方式で認証するため、モジュール側でパスワードを変更しても連携は維持されます。</div>
+        </li>
+        <li>
+          <div class="faq-q">連携できないときは？</div>
+          <div class="faq-a">モジュール側のID・パスワードが正しいか、モジュール側の通常ログインページで確認してください。それでも解決しない場合はサポートまでご連絡ください。</div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2 class="panel-title">モジュール一覧</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tr style="border-bottom:1px solid var(--line);">
+          <th style="text-align:left;padding:10px 8px;color:var(--ink-muted);font-weight:500;width:160px;">モジュール名</th>
+          <th style="text-align:left;padding:10px 8px;color:var(--ink-muted);font-weight:500;">概要</th>
+        </tr>
+        <tr style="border-bottom:1px solid var(--line);">
+          <td style="padding:12px 8px;font-weight:700;">OneTouchAdapt</td>
+          <td style="padding:12px 8px;color:var(--ink-muted);">施設設備の通報・管理会社連携・QR台帳</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 8px;font-weight:700;">MedAdapt</td>
+          <td style="padding:12px 8px;color:var(--ink-muted);">医療・介護の法人間連携OS（NDA・退院通知・面談）</td>
+        </tr>
+      </table>
+    </section>
+
+  </div>
+</main>
+
+<script src="assets/common.js"></script>
+<script>
+(async function () {
+  const session = await Adapt.requireLogin('login.html');
+  if (!session) return;
+  Adapt.renderHeader({ loggedIn: true, active: 'guide' });
+})();
+</script>
+</body>
+</html>
