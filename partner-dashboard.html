@@ -127,7 +127,7 @@
 
   // --- 自分の情報テーブル ---
   document.getElementById('selfTbl').innerHTML = `
-    <tr><th style="width:180px">代理店コード</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
+    <tr><th style="width:180px">${isSuper ? '総代理店コード' : '代理店コード'}</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
     <tr><th>種別</th><td>${isSuper ? '総代理店' : '代理店'}</td></tr>
     <tr><th>会社名</th><td>${Adapt.escapeHTML(p.company_name)}</td></tr>
     <tr><th>ログインID</th><td class="mono">${Adapt.escapeHTML(p.login_id)}</td></tr>
