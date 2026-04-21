@@ -282,8 +282,210 @@ const nextSuperId = async (db) => {
 };
 
 // =========================================================
-//  メインハンドラ
+//  月次台帳（revenue_ledger）集計ロジック
+//  Cron (ledger_monthly_close) と手動再集計APIから共通利用
+//
+//  設計書§12.5 の原則:
+//   - タムジは総代理店にしか支払わない
+//   - 代理店経由の売上は上位の総代理店コードで集約
+//   - タムジ直販（partner_code=NULL）は台帳に入れない
 // =========================================================
+async function generateMonthlyLedger(db, yearMonth) {
+  // 対象月の範囲
+  const ymStart = `${yearMonth}-01 00:00:00`;
+  const [y, m] = yearMonth.split('-').map(Number);
+  const nextMonth = m === 12 ? `${y + 1}-01-01 00:00:00` : `${y}-${String(m + 1).padStart(2, '0')}-01 00:00:00`;
+
+  // 既存エントリ削除（冪等性確保 — 再集計を可能に）
+  await db.prepare("DELETE FROM revenue_ledger WHERE year_month = ? AND status = 'pending'")
+    .bind(yearMonth).run();
+
+  // 当月稼働中だった subscriptions を取得
+  // - status='active'
+  // - started_at <= 月末  かつ  (ended_at IS NULL OR ended_at >= 月初)
+  // - partner_code IS NOT NULL（直販は除外）
+  const subs = await db.prepare(
+    "SELECT s.subscription_id, s.master_company_id, s.app_name, s.partner_code, " +
+    "       s.seat_count, s.unit_price, s.started_at, s.ended_at " +
+    "  FROM subscriptions s " +
+    " WHERE s.partner_code IS NOT NULL " +
+    "   AND s.status IN ('active','expired') " +
+    "   AND s.started_at <= ? " +
+    "   AND (s.ended_at IS NULL OR s.ended_at >= ?)"
+  ).bind(nextMonth, ymStart).all();
+
+  // partner_code → 上位総代理店コード のマッピング
+  // (agent の場合は parent_partner_id → partners.code を引く、superならそのまま)
+  const allPartners = await db.prepare(
+    "SELECT partner_id, code, type, parent_partner_id, revenue_share_pct FROM partners"
+  ).all();
+  const partnerByCode = {};
+  const partnerById = {};
+  for (const p of (allPartners.results || [])) {
+    partnerByCode[p.code] = p;
+    partnerById[p.partner_id] = p;
+  }
+
+  const resolvePayoutSuper = (code) => {
+    const p = partnerByCode[code];
+    if (!p) return null;
+    if (p.type === 'super') return p;
+    if (p.type === 'agent' && p.parent_partner_id) {
+      return partnerById[p.parent_partner_id] || null;
+    }
+    return null;
+  };
+
+  // app_name × 支払先総代理店コード で集約
+  const bucket = {};
+  for (const s of (subs.results || [])) {
+    const sup = resolvePayoutSuper(s.partner_code);
+    if (!sup || sup.type !== 'super') continue;
+    const gross = (s.seat_count || 1) * (s.unit_price || 0);
+    const sharePct = (sup.revenue_share_pct !== null && sup.revenue_share_pct !== undefined) ? sup.revenue_share_pct : 0;
+    const shareAmount = Math.floor(gross * sharePct / 100);
+    const key = `${sup.code}|${s.app_name}`;
+    if (!bucket[key]) {
+      bucket[key] = {
+        partner_code: sup.code,
+        app_name: s.app_name,
+        gross_amount: 0,
+        share_pct: sharePct,
+        share_amount: 0,
+        subscription_ids: []
+      };
+    }
+    bucket[key].gross_amount += gross;
+    bucket[key].share_amount += shareAmount;
+    bucket[key].subscription_ids.push(s.subscription_id);
+  }
+
+  // INSERT
+  const inserts = [];
+  for (const key in bucket) {
+    const b = bucket[key];
+    // 複数サブスクをまとめた場合は subscription_id には最初のを入れる（集計行のため代表値）
+    inserts.push(
+      db.prepare(
+        "INSERT INTO revenue_ledger (year_month, partner_code, app_name, subscription_id, " +
+        "  gross_amount, share_pct, share_amount, status) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')"
+      ).bind(
+        yearMonth, b.partner_code, b.app_name,
+        b.subscription_ids[0] || null,
+        b.gross_amount, b.share_pct, b.share_amount
+      )
+    );
+  }
+  if (inserts.length > 0) await db.batch(inserts);
+
+  return {
+    year_month: yearMonth,
+    generated_entry_count: inserts.length,
+    total_gross: Object.values(bucket).reduce((s, b) => s + b.gross_amount, 0),
+    total_share: Object.values(bucket).reduce((s, b) => s + b.share_amount, 0)
+  };
+}
+
+// =========================================================
+//  契約ライフサイクル関連のCronロジック
+// =========================================================
+
+// 契約終了2ヶ月前通知
+async function runContractNotify2Month(db, env) {
+  const now = new Date();
+  const sixtyDaysLater = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString();
+  const nowIso = now.toISOString();
+
+  const targets = await db.prepare(
+    "SELECT partner_id, type, company_name, code, email, contract_end_at " +
+    "  FROM partners " +
+    " WHERE status = 'active' " +
+    "   AND auto_end_notified_at IS NULL " +
+    "   AND contract_end_at IS NOT NULL " +
+    "   AND contract_end_at <= ? " +
+    "   AND contract_end_at > ?"
+  ).bind(sixtyDaysLater, nowIso).all();
+
+  let sent = 0, failed = 0;
+  for (const p of (targets.results || [])) {
+    if (!p.email) {
+      // メール未登録はスキップ（通知日だけ更新してループ回避）
+      await db.prepare("UPDATE partners SET auto_end_notified_at = datetime('now') WHERE partner_id = ?")
+        .bind(p.partner_id).run();
+      continue;
+    }
+    try {
+      const endDate = new Date(p.contract_end_at).toLocaleDateString('ja-JP');
+      const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+      await sendEmail(env, {
+        to: p.email,
+        subject: `【Adapt】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
+        text:
+`${p.company_name} 様
+
+いつもAdaptをご利用いただきありがとうございます。
+現在の${typeLabel}契約は ${endDate} に終了予定です。
+
+引き続きご利用をご希望の場合は、代理店ダッシュボードから継続申請を行ってください。
+終了をご希望の場合は、ご連絡または終了承認の操作をお願いします。
+
+代理店ログイン: ${(env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/,'')}/partner-login.html
+
+ご不明な点は no-reply@tamjump.com までお問い合わせください。
+※ このアドレスには返信できません。`
+      });
+      await db.prepare(
+        "UPDATE partners SET auto_end_notified_at = datetime('now'), updated_at = datetime('now') WHERE partner_id = ?"
+      ).bind(p.partner_id).run();
+      await audit(db, 'cron_contract_notify', null, null, { partner_id: p.partner_id, email: p.email }, new Request('https://cron'));
+      sent++;
+    } catch (e) {
+      failed++;
+    }
+  }
+  return { sent, failed, candidates: (targets.results || []).length };
+}
+
+// 契約自動失効
+async function runContractAutoExpire(db) {
+  const nowIso = new Date().toISOString();
+
+  // 対象: active + contract_end_at < now
+  const targets = await db.prepare(
+    "SELECT partner_id FROM partners WHERE status = 'active' AND contract_end_at IS NOT NULL AND contract_end_at < ?"
+  ).bind(nowIso).all();
+
+  let expiredCount = 0;
+  for (const p of (targets.results || [])) {
+    await db.batch([
+      db.prepare("UPDATE partners SET status = 'expired', updated_at = datetime('now') WHERE partner_id = ?")
+        .bind(p.partner_id),
+      db.prepare("DELETE FROM partner_sessions WHERE partner_id = ?").bind(p.partner_id)
+    ]);
+    await audit(db, 'cron_contract_expired', null, null, { partner_id: p.partner_id }, new Request('https://cron'));
+    expiredCount++;
+  }
+  return { expired_count: expiredCount };
+}
+
+// 期限切れトークンのクリーンアップ
+async function runCleanupExpiredTokens(db) {
+  const nowIso = new Date().toISOString();
+  const results = await db.batch([
+    db.prepare("DELETE FROM sso_tickets WHERE expires_at < ?").bind(nowIso),
+    db.prepare("DELETE FROM email_verifications WHERE expires_at < ? AND used_at IS NULL").bind(nowIso),
+    db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso),
+    db.prepare("DELETE FROM partner_sessions WHERE expires_at < ?").bind(nowIso)
+  ]);
+  return {
+    sso_tickets_deleted: results[0].meta?.changes || 0,
+    email_verifications_deleted: results[1].meta?.changes || 0,
+    sessions_deleted: results[2].meta?.changes || 0,
+    partner_sessions_deleted: results[3].meta?.changes || 0
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1240,9 +1442,183 @@ ${verifyUrl}
         }, 200, cors);
       }
 
+      // 月次台帳を手動再生成（Cron と同じ処理を on-demand で実行・保険用）
+      const regenMatch = path.match(/^\/api\/admin\/ledger\/(\d{4}-\d{2})\/regenerate$/);
+      if (regenMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const ym = regenMatch[1];
+        try {
+          const result = await generateMonthlyLedger(db, ym);
+          await audit(db, 'admin_ledger_regenerated', r.user.staff_id, r.user.login_id, result, request);
+          return json({ ok: true, ...result }, 200, cors);
+        } catch (e) {
+          return json({ error: 'regeneration_failed', message: String(e.message || e) }, 500, cors);
+        }
+      }
+
+      // =============== Subscriptions (Phase 3d: モック版) ===============
+      //  Phase 3f で Square Web Payments SDK に統合される予定。
+      //  現状は直接作成・状態管理のみ。
+
+      // 自分の会社のsubscription一覧
+      if (path === '/api/subscriptions/mine' && method === 'GET') {
+        const r = await requireAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const rs = await db.prepare(
+          "SELECT subscription_id, app_name, plan, seat_count, unit_price, partner_code, " +
+          "       started_at, ended_at, next_billing_at, status, created_at " +
+          "  FROM subscriptions WHERE master_company_id = ? ORDER BY created_at DESC"
+        ).bind(r.user.master_company_id).all();
+        return json({ ok: true, subscriptions: rs.results || [] }, 200, cors);
+      }
+
+      // subscription 作成（Phase 3d: モック・Phase 3fでSquare連携に置換予定）
+      if (path === '/api/subscriptions/create' && method === 'POST') {
+        const r = await requireAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const b = (await request.json()) || {};
+        const { app_name, plan, seat_count, unit_price } = b;
+        if (!app_name || !plan || !seat_count || !unit_price) {
+          return json({ error: 'missing_fields', fields: ['app_name','plan','seat_count','unit_price'].filter(k => !b?.[k]) }, 400, cors);
+        }
+        if (!['onetouch', 'medadapt'].includes(app_name)) return json({ error: 'invalid_app' }, 400, cors);
+        if (seat_count < 1 || unit_price < 0) return json({ error: 'invalid_values' }, 400, cors);
+
+        // 会社のpartner_code (NULL=直販) を継承（契約期間中は固定）
+        const company = await db.prepare(
+          "SELECT partner_code FROM master_companies WHERE company_id = ?"
+        ).bind(r.user.master_company_id).first();
+
+        const subId = 'SUB-' + randomId(12);
+        const now = nowISO();
+        const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        await db.prepare(
+          "INSERT INTO subscriptions (subscription_id, master_company_id, app_name, plan, seat_count, unit_price, " +
+          "  partner_code, started_at, next_billing_at, status) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')"
+        ).bind(
+          subId, r.user.master_company_id, app_name, plan, seat_count, unit_price,
+          company?.partner_code || null, now, nextBilling
+        ).run();
+
+        await audit(db, 'subscription_created', r.user.staff_id, r.user.login_id, {
+          subscription_id: subId, app_name, plan, seat_count, unit_price,
+          partner_code: company?.partner_code || null
+        }, request);
+
+        return json({
+          ok: true,
+          subscription: {
+            subscription_id: subId, app_name, plan, seat_count, unit_price,
+            partner_code: company?.partner_code || null,
+            started_at: now, next_billing_at: nextBilling, status: 'active'
+          }
+        }, 200, cors);
+      }
+
+      // subscription 解約
+      const cancelSubMatch = path.match(/^\/api\/subscriptions\/([A-Z0-9-]+)\/cancel$/);
+      if (cancelSubMatch && method === 'POST') {
+        const r = await requireAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const subId = cancelSubMatch[1];
+
+        const sub = await db.prepare(
+          "SELECT * FROM subscriptions WHERE subscription_id = ? AND master_company_id = ?"
+        ).bind(subId, r.user.master_company_id).first();
+        if (!sub) return json({ error: 'not_found' }, 404, cors);
+        if (sub.status !== 'active') return json({ error: 'not_active', current_status: sub.status }, 409, cors);
+
+        await db.prepare(
+          "UPDATE subscriptions SET status = 'expired', ended_at = datetime('now'), updated_at = datetime('now') WHERE subscription_id = ?"
+        ).bind(subId).run();
+
+        await audit(db, 'subscription_canceled', r.user.staff_id, r.user.login_id, { subscription_id: subId }, request);
+        return json({ ok: true, subscription_id: subId, status: 'expired' }, 200, cors);
+      }
+
+      // 内部API：モジュールが利用可否判定に使う（§12.8 論点2-A対応の下地）
+      // Service Binding経由で子Workerから呼ばれる前提（認証は内部前提）
+      if (path === '/api/internal/check-subscription' && method === 'GET') {
+        const companyId = url.searchParams.get('company');
+        const appName = url.searchParams.get('app');
+        if (!companyId || !appName) return json({ error: 'missing_params' }, 400, cors);
+        const sub = await db.prepare(
+          "SELECT subscription_id, status, plan, seat_count, started_at, ended_at, next_billing_at " +
+          "  FROM subscriptions " +
+          " WHERE master_company_id = ? AND app_name = ? AND status = 'active' " +
+          " ORDER BY created_at DESC LIMIT 1"
+        ).bind(companyId, appName).first();
+        return json({
+          ok: true,
+          active: !!sub,
+          subscription: sub || null
+        }, 200, cors);
+      }
+
       return json({ error: 'not_found', path, method }, 404, cors);
     } catch (e) {
       return json({ error: 'server_error', message: String(e.message || e) }, 500, cors);
     }
+  },
+
+  // =========================================================
+  //  Cron Triggers（scheduled ハンドラ）
+  //
+  //  Cloudflare Cron は "L"（月末）非対応のため、月次集計は「翌月1日 00:05 JST」に移動。
+  //  実質的な動作は設計書§12.7と同等。
+  //
+  //  wrangler.toml の crons 設定に対応:
+  //   - "0 0 * * *"      → 09:00 JST (contract_notify_2month)
+  //   - "5 15 * * *"     → 00:05 JST 翌日 (contract_auto_expire)
+  //   - "5 15 1 * *"     → 毎月1日 00:05 JST (ledger_monthly_close — 前月分集計)
+  //   - "0 18 * * *"     → 03:00 JST 翌日 (cleanup_expired_tokens)
+  //
+  //  ※ JST時刻はUTCに変換してcron式を書く（UTC = JST - 9h）
+  // =========================================================
+  async scheduled(event, env, ctx) {
+    const db = env.DB;
+    const started = new Date().toISOString();
+    const cron = event.cron;
+    let result = { cron, started, task: null, result: null, error: null };
+
+    try {
+      if (cron === '0 0 * * *') {
+        result.task = 'contract_notify_2month';
+        result.result = await runContractNotify2Month(db, env);
+      } else if (cron === '5 15 * * *') {
+        result.task = 'contract_auto_expire';
+        result.result = await runContractAutoExpire(db);
+      } else if (cron === '5 15 1 * *') {
+        result.task = 'ledger_monthly_close';
+        // 実行時刻: 毎月1日 00:05 JST (= 前月末日 15:05 UTC)
+        // 集計対象は「前月」
+        const now = new Date();
+        const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const prevMonth = new Date(Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth() - 1, 1));
+        const ym = `${prevMonth.getUTCFullYear()}-${String(prevMonth.getUTCMonth() + 1).padStart(2, '0')}`;
+        result.result = await generateMonthlyLedger(db, ym);
+      } else if (cron === '0 18 * * *') {
+        result.task = 'cleanup_expired_tokens';
+        result.result = await runCleanupExpiredTokens(db);
+      } else {
+        result.task = 'unknown_cron';
+        result.error = `No handler for cron: ${cron}`;
+      }
+    } catch (e) {
+      result.error = String(e.message || e);
+    }
+
+    // 実行結果を audit_logs に記録（監査用）
+    try {
+      await db.prepare(
+        "INSERT INTO audit_logs (type, details) VALUES (?, ?)"
+      ).bind('cron_run', JSON.stringify(result)).run();
+    } catch {}
+
+    return result;
   }
 };
