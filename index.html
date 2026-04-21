@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>ホーム｜Adapt</title>
+<title>ホーム｜Adavoo</title>
 <link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
@@ -45,7 +45,7 @@
           <input id="linkPassword" type="password" required autocomplete="current-password" />
           <button type="button" class="pw-toggle" data-pw="linkPassword">表示</button>
         </div>
-        <div class="hint">連携確認にのみ使用し、Adapt側には保存しません。</div>
+        <div class="hint">連携確認にのみ使用し、Adavoo側には保存しません。</div>
       </div>
       <div class="modal__actions">
         <button type="button" class="btn btn--ghost" id="linkCancel">キャンセル</button>
@@ -68,8 +68,8 @@
   if (new URLSearchParams(location.search).get('welcome') === '1') {
     document.getElementById('msg').innerHTML = `
       <div class="msg msg--ok">
-        Adaptアカウントを作成しました。<br>
-        すでにOneTouchAdaptやMedAdaptのアカウントをお持ちの場合は、各カードの「連携する」から紐付けしてください。
+        Adavooアカウントを作成しました。<br>
+        すでにTouchvooやMedvooのアカウントをお持ちの場合は、各カードの「連携する」から紐付けしてください。
       </div>`;
   }
 

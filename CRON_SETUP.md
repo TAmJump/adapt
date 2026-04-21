@@ -1,6 +1,6 @@
 # Cron Triggers セットアップ手順（Phase 3e）
 
-Adapt Worker (`adapt-api`) の定期バッチ処理を Cloudflare Cron Triggers で設定する手順です。
+Adavoo Worker (`adapt-api`) の定期バッチ処理を Cloudflare Cron Triggers で設定する手順です。
 
 ## 設定する4つのCron
 

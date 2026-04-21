@@ -1,6 +1,6 @@
-# Adapt
+# Adavoo
 
-**Adaptプラットフォーム** — OneTouchAdapt・MedAdapt 等のモジュールを統一ID/SSOで束ねるランチャー。
+**Adavooプラットフォーム** — Touchvoo・Medvoo 等のモジュールを統一ID/SSOで束ねるランチャー。
 
 - **URL**: https://tamjump.github.io/adapt/ （Pages有効化後）
 - **API**: https://adapt-api.animalb001.workers.dev （Worker作成後）
@@ -11,12 +11,12 @@
 ## 1. 構成
 
 ```
-親: Adapt (このリポジトリ)
-├── OneTouchAdapt  (TAmJump/onetouch_app)   施設設備管理
-└── MedAdapt       (TAmJump/medadapt)       医療介護連携
+親: Adavoo (このリポジトリ)
+├── Touchvoo      (TAmJump/onetouch_app)   施設設備管理
+└── Medvoo         (TAmJump/medadapt)       医療介護連携
 ```
 
-- Adaptプラットフォームは**無料**。Proプランは従来通り各モジュールで個別契約。
+- Adavooプラットフォームは**無料**。Proプランは従来通り各モジュールで個別契約。
 - 親 `login_id` が正本。`app_links` テーブルでモジュールID（`TEST1-admin` や `ADM-TIGER`）にマッピング。
 - SSO: 親が60秒の短命チケットを発行 → モジュールURLに `?sso_ticket=XXX` で渡す → 子が親API `/api/apps/sso-verify` で引き換え。
 
@@ -77,7 +77,7 @@
 1. https://tamjump.github.io/adapt/login.html にアクセス
 2. **新規登録** → 会社名・ログインID（例: `tamjump-admin`）・パスワード（8文字以上）
 3. 自動ログイン → ランチャー画面
-4. OneTouchAdaptカード「連携する」→ 子ログインID `TEST1-admin` + PW `19800101a` で連携確認
+4. Touchvooカード「連携する」→ 子ログインID `TEST1-admin` + PW `19800101a` で連携確認
 5. 連携済みになったら「開く」→ 新タブでモジュールが開く（`?sso_ticket=XXX` 付き）
 
 ## 4. モジュール側のSSO受け口（Phase 2・未実装）

@@ -1,10 +1,10 @@
 /**
  * =========================================================
- *  Adapt API Worker v2.0  (email-verified register + SES)
+ * Adavoo API Worker v2.0  (email-verified register + SES)
  *  Cloudflare Workers + D1 (adapt-db)
  *
  *  追加で必要な環境変数（Plaintext / Secret）:
- *    AWS_ACCESS_KEY_ID       = 既存MedAdapt/OneTouchAdaptと同じでOK (Plaintext)
+ *    AWS_ACCESS_KEY_ID       = 既存Medvoo/Touchvooと同じでOK (Plaintext)
  *    AWS_SECRET_ACCESS_KEY   = 同上 (Secret推奨)
  *    AWS_REGION              = ap-northeast-1
  *    FROM_EMAIL              = no-reply@tamjump.com
@@ -137,12 +137,12 @@ function verifyEmailHtml({ name, verifyUrl, companyName }) {
 <body style="font-family: 'Helvetica Neue', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background:#ffffff; color:#0a0e1a; margin:0; padding:0;">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; margin:0 auto; padding:32px 20px;">
     <tr><td>
-      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">Adapt</h1>
+      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">Adavoo</h1>
       <p style="font-family:monospace; font-size:11px; color:#5a6070; letter-spacing:0.12em; text-transform:uppercase; margin:0 0 28px 0;">Email Verification</p>
       <h2 style="font-size:18px; font-weight:700; margin:0 0 14px 0;">メールアドレスを確認してください</h2>
       <p style="font-size:14px; line-height:1.8; color:#2a2f3d; margin:0 0 20px 0;">
         ${esc(name)} 様<br><br>
-        Adaptへのご登録ありがとうございます。<br>
+        Adavooへのご登録ありがとうございます。<br>
         以下のボタンを押して、メールアドレスの確認と登録完了をお願いします。
       </p>
       <table cellpadding="0" cellspacing="0" style="margin:8px 0 28px 0;"><tr>
@@ -420,11 +420,11 @@ async function runContractNotify2Month(db, env) {
       const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
       await sendEmail(env, {
         to: p.email,
-        subject: `【Adapt】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
+        subject: `【Adavoo】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
         text:
 `${p.company_name} 様
 
-いつもAdaptをご利用いただきありがとうございます。
+いつもAdavooをご利用いただきありがとうございます。
 現在の${typeLabel}契約は ${endDate} に終了予定です。
 
 引き続きご利用をご希望の場合は、代理店ダッシュボードから継続申請を行ってください。
@@ -500,8 +500,8 @@ async function runCleanupExpiredTokens(db) {
 // 利用可能なプラン一覧（Phase 3f初期版・ハードコード）
 // 将来的にはD1のテーブル化も検討（設計書 Phase 4 の宿題）
 const AVAILABLE_PLANS = [
-  { id: 'onetouch_pro',   app_name: 'onetouch', plan: 'pro',  name: 'OneTouchAdapt Pro',  unit_price: 3000, description: '施設設備管理・QR台帳（IDあたり月額）' },
-  { id: 'medadapt_pro',   app_name: 'medadapt', plan: 'pro',  name: 'MedAdapt Pro',       unit_price: 5000, description: '医療介護法人間連携OS（IDあたり月額）' }
+  { id: 'onetouch_pro',   app_name: 'onetouch', plan: 'pro',  name: 'Touchvoo Pro',  unit_price: 3000, description: '施設設備管理・QR台帳（IDあたり月額）' },
+  { id: 'medadapt_pro',   app_name: 'medadapt', plan: 'pro',  name: 'Medvoo Pro',       unit_price: 5000, description: '医療介護法人間連携OS（IDあたり月額）' }
 ];
 
 // Square Webhook 署名検証
@@ -600,12 +600,12 @@ export default {
         try {
           await sendEmail(env, {
             to: email,
-            subject: '【Adapt】メールアドレス確認のお願い',
+            subject: '【Adavoo】メールアドレス確認のお願い',
             html: verifyEmailHtml({ name, verifyUrl, companyName: company_name }),
             text:
 `${name} 様
 
-Adaptへのご登録ありがとうございます。
+Adavooへのご登録ありがとうございます。
 以下のURLを開いて、メールアドレスの確認と登録完了をお願いします。
 
 ${verifyUrl}
@@ -828,8 +828,8 @@ ${verifyUrl}
           } else {
             // Service Binding経由。ホスト名はダミー（Service Bindingが上書きする）
             // bodyは子API側のフィールド名差異を吸収するため3形式で送信
-            // - OneTouchAdapt: loginId (camelCase)
-            // - MedAdapt: email (ADM-/STF-プレフィックスのlogin_idもemailフィールドで受ける設計)
+            // - Touchvoo: loginId (camelCase)
+            // - Medvoo: email (ADM-/STF-プレフィックスのlogin_idもemailフィールドで受ける設計)
             // - 予備: login_id (snake_case)
             var resp = await svc.fetch('https://internal' + loginPath, {
               method: 'POST',
@@ -1678,7 +1678,7 @@ ${verifyUrl}
             }
           }
 
-          // invoice.payment_made → next_billing_at 更新（Adapt側では決済完了の記録まで）
+          // invoice.payment_made → next_billing_at 更新（Adavoo側では決済完了の記録まで）
           if (eventType === 'invoice.payment_made' && data?.invoice) {
             const inv = data.invoice;
             const subId = inv.subscription_id;

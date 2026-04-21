@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>メール確認｜Adapt</title>
+<title>メール確認｜Adavoo</title>
 <link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
@@ -13,7 +13,7 @@
 <main class="auth-wrap">
   <section class="auth-card" style="max-width:520px;">
     <h1 class="auth-title" id="title">メール確認</h1>
-    <p class="auth-sub">Adapt / Verify email</p>
+    <p class="auth-sub">Adavoo / Verify email</p>
 
     <div id="body">
       <div class="msg msg--info">確認しています…</div>
@@ -41,7 +41,7 @@
       const info = await AdaptAPI.call('/api/auth/verify-info?token=' + encodeURIComponent(token));
       title.textContent = '登録内容の確認';
       body.innerHTML = `
-        <p class="muted" style="margin:0 0 16px 0;">以下の内容でAdaptアカウントを作成します。よろしければ「登録を完了する」を押してください。</p>
+        <p class="muted" style="margin:0 0 16px 0;">以下の内容でAdavooアカウントを作成します。よろしければ「登録を完了する」を押してください。</p>
         <table style="margin-bottom:18px;">
           <tr><th style="width:140px">会社名</th><td>${Adapt.escapeHTML(info.company_name)}</td></tr>
           <tr><th>管理者氏名</th><td>${Adapt.escapeHTML(info.name)}</td></tr>
@@ -78,7 +78,7 @@
       title.textContent = '登録が完了しました';
       body.innerHTML = `
         <div class="msg msg--ok">
-          Adaptアカウントを発行しました。<br>
+          Adavooアカウントを発行しました。<br>
           そのままログインされています。
         </div>
         <a class="btn btn--primary btn--block" href="index.html">ホームへ</a>

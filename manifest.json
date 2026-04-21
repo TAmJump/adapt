@@ -1,7 +1,7 @@
 {
-  "name": "Adapt",
-  "short_name": "Adapt",
-  "description": "Adaptファミリー（OneTouchAdapt / MedAdapt）親アプリ",
+  "name": "Adavoo",
+  "short_name": "Adavoo",
+  "description": "Adavooプラットフォーム（Touchvoo / Medvoo）親アプリ — Vision Of Oneness",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
