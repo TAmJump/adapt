@@ -53,6 +53,11 @@
         </div>
         <div class="hint">8文字以上</div>
       </div>
+      <div class="field">
+        <label for="partnerCode">代理店コード（任意）</label>
+        <input id="partnerCode" type="text" autocomplete="off" maxlength="10" style="text-transform:uppercase;" placeholder="例: SUP-000001 / AGT-000001" />
+        <div class="hint">代理店から案内されたコードがある場合のみ入力してください。未入力で問題ありません。</div>
+      </div>
       <button class="btn btn--primary btn--block" id="submitBtn" type="submit">確認メールを送信</button>
     </form>
 
@@ -99,13 +104,15 @@
     btn.disabled = true;
     btn.textContent = '送信中…';
     try {
+      const partnerCodeRaw = document.getElementById('partnerCode').value.trim().toUpperCase();
       const body = {
         company_name: document.getElementById('companyName').value.trim(),
         name: document.getElementById('name').value.trim(),
         email: document.getElementById('email').value.trim(),
         phone: document.getElementById('phone').value.trim() || undefined,
         login_id: document.getElementById('loginId').value.trim(),
-        password: document.getElementById('password').value
+        password: document.getElementById('password').value,
+        partner_code: partnerCodeRaw || undefined
       };
       const data = await AdaptAPI.call('/api/auth/register', { method: 'POST', body });
       if (data.pending_verification) {
@@ -121,7 +128,10 @@
         invalid_login_id: 'ログインIDは3〜40文字の半角英数字・- _ で入力してください。',
         invalid_email: 'メールアドレスの形式が正しくありません。',
         missing_fields: '必須項目を入力してください（会社名・氏名・メール・ログインID・パスワード）。',
-        email_send_failed: 'メール送信に失敗しました。メールアドレスが正しいかご確認ください。'
+        email_send_failed: 'メール送信に失敗しました。メールアドレスが正しいかご確認ください。',
+        invalid_partner_code_format: '代理店コードの形式が正しくありません（SUP-XXXXXX または AGT-XXXXXX）。',
+        partner_code_not_found: '入力された代理店コードは存在しません。',
+        partner_code_inactive: 'この代理店コードは現在利用できません。'
       };
       msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
     } finally {

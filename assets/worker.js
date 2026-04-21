@@ -18,7 +18,7 @@ const CORS_HEADERS = (origin, allowed) => {
   return {
     'Access-Control-Allow-Origin': ok,
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Partner-Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -201,6 +201,44 @@ async function audit(db, type, staffId, loginId, details, request) {
   } catch (e) {}
 }
 
+// =========================================================
+//  代理店（partners）認証
+//  - 独立ヘッダ X-Partner-Authorization: Bearer <token> を使用
+//  - master_staff の sessions とは完全分離（partner_sessions）
+// =========================================================
+async function requirePartnerAuth(request, db) {
+  const auth = request.headers.get('X-Partner-Authorization') || '';
+  if (!auth.startsWith('Bearer ')) return { error: 'unauthorized', status: 401 };
+  const token = auth.slice(7);
+  const sess = await db.prepare(
+    "SELECT ps.token, ps.partner_id, ps.expires_at, " +
+    "       p.type, p.parent_partner_id, p.company_name, p.code, p.login_id, " +
+    "       p.email, p.phone, p.contract_start_at, p.contract_end_at, p.status, p.revenue_share_pct " +
+    "  FROM partner_sessions ps JOIN partners p ON ps.partner_id = p.partner_id " +
+    " WHERE ps.token = ?"
+  ).bind(token).first();
+  if (!sess) return { error: 'invalid_token', status: 401 };
+  if (new Date(sess.expires_at) < new Date()) {
+    await db.prepare("DELETE FROM partner_sessions WHERE token = ?").bind(token).run();
+    return { error: 'expired', status: 401 };
+  }
+  if (sess.status !== 'active') return { error: 'partner_suspended', status: 403 };
+  return { partner: sess };
+}
+
+// 代理店コード形式チェック: SUP-XXXXXX (総代理店) / AGT-XXXXXX (代理店)
+const PARTNER_CODE_RE = /^(SUP|AGT)-\d{6}$/;
+function isValidPartnerCodeFormat(code) {
+  return typeof code === 'string' && PARTNER_CODE_RE.test(code);
+}
+
+// 代理店コードの存在＋active確認
+async function lookupActivePartnerByCode(db, code) {
+  return await db.prepare(
+    "SELECT partner_id, type, code, company_name, status FROM partners WHERE code = ?"
+  ).bind(code).first();
+}
+
 const nextCompanyId = async (db) => {
   const row = await db.prepare(
     "SELECT company_id FROM master_companies WHERE company_id LIKE 'ADP-%' ORDER BY company_id DESC LIMIT 1"
@@ -241,7 +279,7 @@ export default {
       // 新規登録（メール確認フロー）
       if (path === '/api/auth/register' && method === 'POST') {
         const b = await request.json();
-        const { company_name, login_id, name, email, password, phone } = b || {};
+        const { company_name, login_id, name, email, password, phone, partner_code } = b || {};
         if (!company_name || !login_id || !name || !email || !password) {
           return json({ error: 'missing_fields', fields: ['company_name','login_id','name','email','password'].filter(k => !b?.[k]) }, 400, cors);
         }
@@ -251,6 +289,19 @@ export default {
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           return json({ error: 'invalid_email' }, 400, cors);
+        }
+
+        // 代理店コードが入力されている場合のバリデーション（任意項目）
+        let normalizedPartnerCode = null;
+        if (partner_code && String(partner_code).trim() !== '') {
+          const code = String(partner_code).trim().toUpperCase();
+          if (!isValidPartnerCodeFormat(code)) {
+            return json({ error: 'invalid_partner_code_format' }, 400, cors);
+          }
+          const p = await lookupActivePartnerByCode(db, code);
+          if (!p) return json({ error: 'partner_code_not_found' }, 404, cors);
+          if (p.status !== 'active') return json({ error: 'partner_code_inactive' }, 409, cors);
+          normalizedPartnerCode = code;
         }
 
         const exists = await db.prepare("SELECT 1 FROM master_staff WHERE login_id = ?").bind(login_id).first();
@@ -263,7 +314,8 @@ export default {
         const passwordHash = await sha256(password);
         const pending = {
           company_name, login_id, name, email,
-          phone: phone || null, password_hash: passwordHash
+          phone: phone || null, password_hash: passwordHash,
+          partner_code: normalizedPartnerCode  // NULL = タムジ直販
         };
         const expiresAt = plusSec(60 * 60 * 24); // 24時間
 
@@ -341,9 +393,26 @@ ${verifyUrl}
         const sessionToken = randomId(48);
         const expiresAt = plusSec(60 * 60 * 24 * 30);
 
+        // 代理店コードが pending_data にあり、かつ現時点でもactiveであるか最終確認
+        // （登録からverifyまでの間に代理店が終了する稀なケースを救済）
+        let partnerCodeToPersist = null;
+        if (p.partner_code) {
+          const p2 = await lookupActivePartnerByCode(db, p.partner_code);
+          if (p2 && p2.status === 'active') {
+            partnerCodeToPersist = p.partner_code;
+          }
+          // もし期間中に失効していても登録自体は続行（partner_code は NULL 扱い＝タムジ直販に降格）
+        }
+
         await db.batch([
-          db.prepare("INSERT INTO master_companies (company_id, name, email, phone) VALUES (?,?,?,?)")
-            .bind(companyId, p.company_name, p.email || null, p.phone || null),
+          db.prepare(
+            "INSERT INTO master_companies (company_id, name, email, phone, partner_code, partner_code_locked_at) " +
+            "VALUES (?,?,?,?,?,?)"
+          ).bind(
+            companyId, p.company_name, p.email || null, p.phone || null,
+            partnerCodeToPersist,
+            partnerCodeToPersist ? nowISO() : null
+          ),
           db.prepare(
             "INSERT INTO master_staff (staff_id, master_company_id, login_id, name, email, password_hash, role, last_login_at) " +
             "VALUES (?,?,?,?,?,?, 'master_admin', datetime('now'))"
@@ -354,7 +423,10 @@ ${verifyUrl}
             .bind(token)
         ]);
 
-        await audit(db, 'register_verified', staffId, p.login_id, { company_id: companyId }, request);
+        await audit(db, 'register_verified', staffId, p.login_id, {
+          company_id: companyId,
+          partner_code: partnerCodeToPersist
+        }, request);
         return json({
           ok: true,
           token: sessionToken,
@@ -362,7 +434,8 @@ ${verifyUrl}
           user: {
             staff_id: staffId, login_id: p.login_id, name: p.name, email: p.email,
             role: 'master_admin', master_company_id: companyId
-          }
+          },
+          partner_code: partnerCodeToPersist
         }, 200, cors);
       }
 
@@ -584,6 +657,149 @@ ${verifyUrl}
 
         await audit(db, 'sso_consumed', row.staff_id, null, { app_name: row.app_name, child_login_id: row.child_login_id }, request);
         return json({ ok: true, app_name: row.app_name, child_login_id: row.child_login_id, master_staff: staff }, 200, cors);
+      }
+
+      // =============== 代理店コード（エンドユーザー側：後付け入力） ===============
+
+      // エンドユーザーが後から代理店コードを紐付ける（1回のみ・以後変更不可）
+      if (path === '/api/company/claim-partner-code' && method === 'POST') {
+        const r = await requireAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const { partner_code } = (await request.json()) || {};
+        if (!partner_code) return json({ error: 'missing_fields' }, 400, cors);
+
+        const code = String(partner_code).trim().toUpperCase();
+        if (!isValidPartnerCodeFormat(code)) {
+          return json({ error: 'invalid_partner_code_format' }, 400, cors);
+        }
+
+        // 会社の現状確認: 既にロック済みなら変更不可
+        const company = await db.prepare(
+          "SELECT company_id, partner_code, partner_code_locked_at FROM master_companies WHERE company_id = ?"
+        ).bind(r.user.master_company_id).first();
+        if (!company) return json({ error: 'company_not_found' }, 404, cors);
+        if (company.partner_code_locked_at) {
+          return json({
+            error: 'partner_code_already_locked',
+            partner_code: company.partner_code
+          }, 409, cors);
+        }
+
+        // コード存在＋active 確認
+        const p = await lookupActivePartnerByCode(db, code);
+        if (!p) return json({ error: 'partner_code_not_found' }, 404, cors);
+        if (p.status !== 'active') return json({ error: 'partner_code_inactive' }, 409, cors);
+
+        // 書き込み（partner_code + partner_code_locked_at を同時にセット）
+        await db.prepare(
+          "UPDATE master_companies SET partner_code = ?, partner_code_locked_at = datetime('now'), updated_at = datetime('now') WHERE company_id = ?"
+        ).bind(code, r.user.master_company_id).run();
+
+        await audit(db, 'claim_partner_code', r.user.staff_id, r.user.login_id, {
+          company_id: r.user.master_company_id, partner_code: code
+        }, request);
+
+        return json({
+          ok: true,
+          partner_code: code,
+          partner_code_locked_at: nowISO(),
+          partner: { type: p.type, company_name: p.company_name }
+        }, 200, cors);
+      }
+
+      // =============== 代理店（partner）認証系 ===============
+
+      // 代理店ログイン
+      if (path === '/api/partner/login' && method === 'POST') {
+        const { login_id, password } = (await request.json()) || {};
+        if (!login_id || !password) return json({ error: 'missing_fields' }, 400, cors);
+
+        const hash = await sha256(password);
+        const p = await db.prepare(
+          "SELECT * FROM partners WHERE login_id = ? AND password_hash = ?"
+        ).bind(login_id, hash).first();
+
+        if (!p) {
+          await audit(db, 'partner_login_failed', null, login_id, null, request);
+          return json({ error: 'invalid_credentials' }, 401, cors);
+        }
+        if (p.status !== 'active') {
+          await audit(db, 'partner_login_blocked', null, login_id, { status: p.status }, request);
+          return json({ error: 'partner_suspended', status_detail: p.status }, 403, cors);
+        }
+
+        const token = randomId(48);
+        const expiresAt = plusSec(60 * 60 * 24 * 30);
+        await db.batch([
+          db.prepare("INSERT INTO partner_sessions (token, partner_id, expires_at) VALUES (?,?,?)")
+            .bind(token, p.partner_id, expiresAt),
+          db.prepare("UPDATE partners SET updated_at = datetime('now') WHERE partner_id = ?")
+            .bind(p.partner_id)
+        ]);
+
+        await audit(db, 'partner_login', null, login_id, { partner_id: p.partner_id, type: p.type }, request);
+        return json({
+          ok: true,
+          token,
+          expires_at: expiresAt,
+          partner: {
+            partner_id: p.partner_id,
+            type: p.type,
+            parent_partner_id: p.parent_partner_id,
+            company_name: p.company_name,
+            code: p.code,
+            login_id: p.login_id,
+            email: p.email,
+            contract_start_at: p.contract_start_at,
+            contract_end_at: p.contract_end_at,
+            revenue_share_pct: p.revenue_share_pct
+          }
+        }, 200, cors);
+      }
+
+      // 代理店ログアウト
+      if (path === '/api/partner/logout' && method === 'POST') {
+        const auth = request.headers.get('X-Partner-Authorization') || '';
+        if (auth.startsWith('Bearer ')) {
+          const t = auth.slice(7);
+          const s = await db.prepare("SELECT partner_id FROM partner_sessions WHERE token = ?").bind(t).first();
+          await db.prepare("DELETE FROM partner_sessions WHERE token = ?").bind(t).run();
+          if (s) await audit(db, 'partner_logout', null, null, { partner_id: s.partner_id }, request);
+        }
+        return json({ ok: true }, 200, cors);
+      }
+
+      // 代理店情報取得
+      if (path === '/api/partner/me' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+        // 親総代理店情報（agentの場合のみ）
+        let parent = null;
+        if (p.type === 'agent' && p.parent_partner_id) {
+          parent = await db.prepare(
+            "SELECT partner_id, code, company_name FROM partners WHERE partner_id = ?"
+          ).bind(p.parent_partner_id).first();
+        }
+        return json({
+          ok: true,
+          partner: {
+            partner_id: p.partner_id,
+            type: p.type,
+            parent_partner_id: p.parent_partner_id,
+            parent: parent,
+            company_name: p.company_name,
+            code: p.code,
+            login_id: p.login_id,
+            email: p.email,
+            phone: p.phone,
+            contract_start_at: p.contract_start_at,
+            contract_end_at: p.contract_end_at,
+            revenue_share_pct: p.revenue_share_pct,
+            status: p.status
+          }
+        }, 200, cors);
       }
 
       return json({ error: 'not_found', path, method }, 404, cors);

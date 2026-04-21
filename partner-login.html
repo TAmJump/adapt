@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>代理店ログイン｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="auth-wrap">
+  <section class="auth-card">
+    <h1 class="auth-title">代理店ログイン</h1>
+    <p class="auth-sub">Adapt / Partner Sign in</p>
+
+    <p class="muted" style="margin:0 0 22px 0;">
+      タムジ社から発行された総代理店・代理店アカウントでログインしてください。<br>
+      エンドユーザー（Adapt会員）の方は<a href="login.html">通常ログイン</a>をご利用ください。
+    </p>
+
+    <div id="msg"></div>
+
+    <form id="loginForm" class="stack" autocomplete="on" novalidate>
+      <div class="field">
+        <label for="loginId">代理店ログインID</label>
+        <input id="loginId" name="login_id" type="text" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label for="password">パスワード</label>
+        <div class="pw-wrap">
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button type="button" class="pw-toggle" data-pw="password">表示</button>
+        </div>
+      </div>
+      <button class="btn btn--primary btn--block" id="submitBtn" type="submit">ログイン</button>
+    </form>
+
+    <div class="auth-footer">
+      <a href="login.html">通常ログインへ戻る</a>
+    </div>
+  </section>
+</main>
+
+<script src="assets/common.js"></script>
+<script>
+  Adapt.renderHeader({ loggedIn: false });
+  Adapt.bindPasswordToggles();
+
+  // 既に代理店トークンがあれば自動でダッシュボードへ
+  if (PartnerAPI.token()) {
+    PartnerAPI.call('/api/partner/me')
+      .then(() => location.href = 'partner-dashboard.html')
+      .catch(() => PartnerAPI.clear());
+  }
+
+  const form = document.getElementById('loginForm');
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    msg.innerHTML = '';
+    btn.disabled = true;
+    btn.textContent = 'ログイン中…';
+    try {
+      const data = await PartnerAPI.call('/api/partner/login', {
+        method: 'POST',
+        body: {
+          login_id: document.getElementById('loginId').value.trim(),
+          password: document.getElementById('password').value
+        }
+      });
+      PartnerAPI.setToken(data.token, data.expires_at);
+      PartnerAPI.setPartner(data.partner);
+      location.href = 'partner-dashboard.html';
+    } catch (e) {
+      const map = {
+        invalid_credentials: 'ログインIDまたはパスワードが違います。',
+        partner_suspended: 'この代理店アカウントは現在利用できません（契約終了・停止等）。',
+        missing_fields: '入力を確認してください。'
+      };
+      msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'ログイン';
+    }
+  });
+</script>
+</body>
+</html>
