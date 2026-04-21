@@ -4,76 +4,87 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>ガイド｜Adavoo</title>
+<title>操作ガイド｜Adavoo</title>
 <link rel="stylesheet" href="assets/style.css" />
 <style>
-  .step-num {
-    display: inline-block;
-    min-width: 24px;
-    height: 24px;
-    line-height: 24px;
-    text-align: center;
-    border: 1px solid var(--line-strong);
-    border-radius: 100px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    font-weight: 700;
-    margin-right: 8px;
-    color: var(--ink);
+  .guide-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    align-items: start;
   }
-  .step-title {
-    font-weight: 700;
-    font-size: 15px;
-    margin-bottom: 6px;
-    color: var(--ink);
+  @media (max-width: 860px) {
+    .guide-layout { grid-template-columns: 1fr; }
+    .guide-toc { position: static !important; }
   }
-  .step-body {
-    color: var(--ink-muted);
-    font-size: 13px;
-    line-height: 1.7;
-    margin-left: 32px;
-  }
-  .step-body .code {
-    font-family: 'JetBrains Mono', monospace;
-    background: #f5f5f5;
-    padding: 1px 6px;
+  .guide-toc {
+    position: sticky;
+    top: 24px;
+    padding: 18px 20px;
+    border: 1px solid var(--line);
     border-radius: 4px;
-    font-size: 12px;
-    color: var(--ink);
-  }
-  .faq-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  .faq-list > li {
-    padding: 14px 0;
-    border-top: 1px solid var(--line);
-  }
-  .faq-list > li:first-child {
-    border-top: 0;
-    padding-top: 0;
-  }
-  .faq-q {
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--ink);
-    margin-bottom: 4px;
-  }
-  .faq-a {
-    color: var(--ink-muted);
     font-size: 13px;
-    line-height: 1.7;
+  }
+  .guide-toc__heading {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    margin: 0 0 10px 0;
+  }
+  .guide-toc ul { list-style: none; padding: 0; margin: 0; }
+  .guide-toc li { margin: 4px 0; }
+  .guide-toc a { color: var(--ink-soft); text-decoration: none; font-size: 12.5px; }
+  .guide-toc a:hover { color: var(--red); }
+  .guide-toc .sub { padding-left: 12px; color: var(--ink-muted); font-size: 12px; }
+
+  .guide-content > section { scroll-margin-top: 20px; }
+
+  .step-num {
+    display: inline-block; min-width: 24px; height: 24px; line-height: 24px;
+    text-align: center; border: 1px solid var(--line-strong); border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+    margin-right: 8px; color: var(--ink);
+  }
+  .step-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: var(--ink); }
+  .step-body  { color: var(--ink-muted); font-size: 13px; line-height: 1.7; margin-left: 32px; }
+  .step-body .code, .inline-code {
+    font-family: 'JetBrains Mono', monospace; background: #f5f5f5;
+    padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--ink);
   }
   .status-pill {
-    display: inline-block;
-    padding: 1px 8px;
-    border: 1px solid var(--line-strong);
-    border-radius: 100px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    color: var(--ink);
+    display: inline-block; padding: 1px 8px; border: 1px solid var(--line-strong);
+    border-radius: 100px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.04em; color: var(--ink);
+  }
+  .faq-list { list-style: none; padding: 0; margin: 0; }
+  .faq-list > li { padding: 14px 0; border-top: 1px solid var(--line); }
+  .faq-list > li:first-child { border-top: 0; padding-top: 0; }
+  .faq-q { font-weight: 700; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
+  .faq-a { color: var(--ink-muted); font-size: 13px; line-height: 1.7; }
+
+  .role-chip {
+    display: inline-block; padding: 2px 8px;
+    border: 1px solid var(--line-strong); border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--ink-muted); margin-left: 8px; vertical-align: middle;
+  }
+  .role-chip--end { border-color: var(--line-strong); color: var(--ink-muted); }
+  .role-chip--partner { border-color: #fde68a; color: #92400e; background: #fef9c3; }
+  .role-chip--admin { border-color: #fecaca; color: #b91c1c; background: #fef2f2; }
+
+  .note {
+    padding: 10px 14px; border-left: 3px solid var(--red);
+    background: #fafafa; font-size: 12.5px; line-height: 1.75;
+    color: var(--ink-muted); margin: 10px 0;
+  }
+  .note strong { color: var(--ink); }
+
+  .divider-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 0.18em; color: var(--red); text-transform: uppercase;
+    margin-bottom: 6px;
   }
 </style>
 </head>
@@ -83,131 +94,409 @@
 <main class="container">
   <section class="page-intro">
     <p class="section-label">Guide</p>
-    <h1>モジュール連携ガイド</h1>
-    <p>Adavooに既存のモジュール（Touchvoo・Medvoo）を紐付けて、1クリックで起動できるようにする手順です。</p>
+    <h1>操作ガイド</h1>
+    <p>Adavoo / Touchvoo / Medvoo の使い方を、役割ごとにまとめました。</p>
   </section>
 
-  <div class="stack">
+  <div class="guide-layout">
 
-    <section class="card">
-      <h2 class="panel-title">はじめに</h2>
-      <p style="color:var(--ink-muted);font-size:13px;line-height:1.7;">
-        Adavooは各モジュールを束ねるポータルです。各モジュールを個別に開くのではなく、Adavooから連携してまとめて起動できます。<br>
-        一度連携すれば、以降はAdavooにログインするだけで、モジュール側のID・パスワード入力は不要になります。
-      </p>
-    </section>
-
-    <section class="card">
-      <h2 class="panel-title">連携前に用意するもの</h2>
-      <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;margin:0;">
-        <li>連携したいモジュールの<strong style="color:var(--ink);">ログインID</strong></li>
-        <li>連携したいモジュールの<strong style="color:var(--ink);">パスワード</strong></li>
+    <nav class="guide-toc">
+      <p class="guide-toc__heading">目次</p>
+      <ul>
+        <li><a href="#intro">はじめに</a></li>
+        <li>
+          <a href="#end-user">エンドユーザー向け</a>
+          <ul>
+            <li class="sub"><a href="#register">アカウント登録</a></li>
+            <li class="sub"><a href="#module-link">モジュール連携</a></li>
+            <li class="sub"><a href="#module-use">連携後の使い方</a></li>
+            <li class="sub"><a href="#purchase">モジュール購入</a></li>
+            <li class="sub"><a href="#partner-code">代理店コード紐付け</a></li>
+            <li class="sub"><a href="#account">アカウント管理</a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="#partner">代理店向け</a>
+          <ul>
+            <li class="sub"><a href="#partner-login">代理店ログイン</a></li>
+            <li class="sub"><a href="#partner-dashboard">ダッシュボード</a></li>
+            <li class="sub"><a href="#sub-agent">配下代理店の登録</a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="#admin">タムジ管理者向け</a>
+          <ul>
+            <li class="sub"><a href="#admin-summary">全体サマリー</a></li>
+            <li class="sub"><a href="#admin-partner">代理店管理</a></li>
+            <li class="sub"><a href="#admin-ledger">月次台帳・支払い</a></li>
+          </ul>
+        </li>
+        <li><a href="#faq">よくある質問</a></li>
       </ul>
-      <p class="hint" style="margin-top:10px;">
-        モジュール側の契約・アカウントが先に必要です。未契約の場合は各モジュールのLPから申し込んでください。
-      </p>
-    </section>
+    </nav>
 
-    <section class="card">
-      <h2 class="panel-title">連携の手順</h2>
+    <div class="guide-content stack">
 
-      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
-        <div class="step-title"><span class="step-num">1</span>ホーム画面を開く</div>
-        <div class="step-body">
-          Adavooにログイン後、<span class="code">ホーム</span>に各モジュールがカード形式で表示されます。
+      <section class="card" id="intro">
+        <h2 class="panel-title">はじめに</h2>
+        <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
+          Adavooは複数のモジュール（Touchvoo・Medvoo）をひとつのIDで束ねるプラットフォームです。<br>
+          役割（エンドユーザー／代理店／タムジ管理者）によって操作画面が異なるため、この操作ガイドも役割ごとに整理しています。左の目次から必要な箇所にジャンプしてください。
+        </p>
+        <div class="note" style="margin-top:14px;">
+          <strong>用語のおさらい：</strong>
+          <ul style="margin:6px 0 0 0;padding-left:20px;">
+            <li><strong>エンドユーザー</strong> … モジュールを実際に使う会社のアカウント</li>
+            <li><strong>代理店</strong> … エンドユーザーを勧誘・サポートする会社（総代理店／代理店の2階層）</li>
+            <li><strong>タムジ管理者</strong> … 全体の管理を行うタムジ社の運用アカウント（role=tamj_admin）</li>
+          </ul>
         </div>
-      </div>
+      </section>
 
-      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
-        <div class="step-title"><span class="step-num">2</span>「連携する」ボタンを押す</div>
-        <div class="step-body">
-          未連携のモジュールカードには<span class="code">連携する</span>ボタンが表示されています。クリックすると連携用のダイアログが開きます。
+      <section class="card" id="end-user">
+        <h2 class="panel-title">エンドユーザー向け <span class="role-chip role-chip--end">END USER</span></h2>
+        <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
+          Adavooアカウントでログインし、Touchvoo・Medvooを使う側の操作です。
+        </p>
+      </section>
+
+      <section class="card" id="register">
+        <h3 class="panel-title" style="font-size:15px;">① アカウント登録</h3>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>新規登録ページを開く</div>
+          <div class="step-body">トップから <span class="code">新規登録</span> をクリックします。</div>
         </div>
-      </div>
-
-      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
-        <div class="step-title"><span class="step-num">3</span>モジュールのID・パスワードを入力</div>
-        <div class="step-body">
-          用意したモジュール側のログインID・パスワードを入力して送信します。<br>
-          入力されたパスワードはAdavoo側には保存されません（認証確認にのみ使用）。
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>フォーム入力</div>
+          <div class="step-body">
+            会社名・メール・管理者氏名・ログインID・パスワードを入力。<br>
+            <strong>代理店コードをお持ちの方は入力</strong>してください（任意・形式：<span class="code">SUP-XXXXXX</span> または <span class="code">AGT-XXXXXX</span>）。未入力でも登録は可能です。
+          </div>
         </div>
-      </div>
-
-      <div style="padding:14px 0;">
-        <div class="step-title"><span class="step-num">4</span>カードが <span class="status-pill">LINKED</span> に変われば完了</div>
-        <div class="step-body">
-          連携成功時、カード右上の表示が<span class="status-pill">NOT LINKED</span>から<span class="status-pill">LINKED</span>に変わります。
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">3</span>確認メールを受信</div>
+          <div class="step-body">
+            入力されたメールアドレスに確認メールが届きます（差出人: <span class="code">no-reply@tamjump.com</span>）。<br>
+            届かない場合は迷惑メールフォルダをご確認ください。
+          </div>
         </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2 class="panel-title">連携後の使い方</h2>
-      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
-        <div class="step-title">開く</div>
-        <div class="step-body">
-          カードの<span class="code">開く</span>ボタンから、モジュールが自動ログイン状態で新しいタブに開きます。
+        <div style="padding:10px 0;">
+          <div class="step-title"><span class="step-num">4</span>メール内のボタンをクリック</div>
+          <div class="step-body">
+            「登録を完了する」ボタンを押すと、アカウントが発行されてそのままログイン状態になります。リンク有効期限は24時間です。
+          </div>
         </div>
-      </div>
-      <div style="padding:14px 0;border-bottom:1px solid var(--line);">
-        <div class="step-title">LP（ランディングページ）</div>
-        <div class="step-body">
-          <span class="code">LP</span>ボタンから各モジュールの紹介ページを表示できます。
+        <div class="note">
+          代理店コードを入れて登録すると、その代理店の配下エンドユーザーとして記録されます。入力後は<strong>変更不可</strong>です。後から追加することは可能（次項）。
         </div>
-      </div>
-      <div style="padding:14px 0;">
-        <div class="step-title">解除</div>
-        <div class="step-body">
-          <span class="code">解除</span>ボタンから連携解除ができます。モジュール側のデータは削除されません。再度連携すれば同じアカウントでそのまま使えます。
+      </section>
+
+      <section class="card" id="module-link">
+        <h3 class="panel-title" style="font-size:15px;">② モジュール連携</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          既に Touchvoo・Medvoo のアカウントをお持ちの場合、Adavooに紐付けると1クリックで起動できるようになります。
+        </p>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>ホーム画面を開く</div>
+          <div class="step-body">Adavooにログイン後、ホームにモジュールカードが表示されます。</div>
         </div>
-      </div>
-    </section>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>「連携する」ボタンを押す</div>
+          <div class="step-body">
+            未連携のカードには <span class="code">連携する</span> ボタンが表示されます。クリックでダイアログが開きます。
+          </div>
+        </div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">3</span>モジュール側のID・パスワードを入力</div>
+          <div class="step-body">
+            連携確認のためにのみ使用し、パスワードはAdavoo側には保存されません。
+          </div>
+        </div>
+        <div style="padding:10px 0;">
+          <div class="step-title"><span class="step-num">4</span>カードが <span class="status-pill">LINKED</span> に変われば完了</div>
+          <div class="step-body">
+            連携成功時、カード右上が <span class="status-pill">NOT LINKED</span> から <span class="status-pill">LINKED</span> に変わります。
+          </div>
+        </div>
+      </section>
 
-    <section class="card">
-      <h2 class="panel-title">よくある質問</h2>
-      <ul class="faq-list">
-        <li>
-          <div class="faq-q">連携に使えるIDを途中で変更できますか？</div>
-          <div class="faq-a">直接の変更はできません。一度<span class="code">解除</span>してから、新しいIDで再連携してください。</div>
-        </li>
-        <li>
-          <div class="faq-q">同じモジュールに複数のIDを紐付けできますか？</div>
-          <div class="faq-a">1つのAdavooアカウントにつき、各モジュール1IDまでです。複数のアカウントを切り替えて使いたい場合は、モジュール側の通常ログインをお使いください。</div>
-        </li>
-        <li>
-          <div class="faq-q">連携解除するとモジュール側のデータは消えますか？</div>
-          <div class="faq-a">消えません。Adavooの連携情報のみが削除され、モジュール側のアカウント・データはそのまま残ります。</div>
-        </li>
-        <li>
-          <div class="faq-q">パスワードを変更したら連携し直しが必要ですか？</div>
-          <div class="faq-a">不要です。連携時はパスワードを保存しておらず、以降は内部チケット方式で認証するため、モジュール側でパスワードを変更しても連携は維持されます。</div>
-        </li>
-        <li>
-          <div class="faq-q">連携できないときは？</div>
-          <div class="faq-a">モジュール側のID・パスワードが正しいか、モジュール側の通常ログインページで確認してください。それでも解決しない場合はサポートまでご連絡ください。</div>
-        </li>
-      </ul>
-    </section>
+      <section class="card" id="module-use">
+        <h3 class="panel-title" style="font-size:15px;">③ 連携後の使い方</h3>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title">開く</div>
+          <div class="step-body">
+            カードの <span class="code">開く</span> ボタンから、モジュールが自動ログイン状態で新しいタブで起動します。
+          </div>
+        </div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title">LP（ランディングページ）</div>
+          <div class="step-body">
+            <span class="code">LP</span> から各モジュールの紹介ページを開けます。
+          </div>
+        </div>
+        <div style="padding:10px 0;">
+          <div class="step-title">解除</div>
+          <div class="step-body">
+            <span class="code">解除</span> で連携を解除できます。モジュール側のデータは削除されません。再連携すれば同じアカウントで元通り使えます。
+          </div>
+        </div>
+      </section>
 
-    <section class="card">
-      <h2 class="panel-title">モジュール一覧</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <tr style="border-bottom:1px solid var(--line);">
-          <th style="text-align:left;padding:10px 8px;color:var(--ink-muted);font-weight:500;width:160px;">モジュール名</th>
-          <th style="text-align:left;padding:10px 8px;color:var(--ink-muted);font-weight:500;">概要</th>
-        </tr>
-        <tr style="border-bottom:1px solid var(--line);">
-          <td style="padding:12px 8px;font-weight:700;">Touchvoo</td>
-          <td style="padding:12px 8px;color:var(--ink-muted);">施設設備の通報・管理会社連携・QR台帳</td>
-        </tr>
-        <tr>
-          <td style="padding:12px 8px;font-weight:700;">Medvoo</td>
-          <td style="padding:12px 8px;color:var(--ink-muted);">医療・介護の法人間連携OS（NDA・退院通知・面談）</td>
-        </tr>
-      </table>
-    </section>
+      <section class="card" id="purchase">
+        <h3 class="panel-title" style="font-size:15px;">④ モジュール購入</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          新規にモジュールを契約する場合の手順です。Adavooのホーム画面から <span class="code">＋ モジュール購入</span> ボタンで購入画面へ遷移します。
+        </p>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>プランを選択</div>
+          <div class="step-body">Touchvoo Pro / Medvoo Pro など、利用したいモジュールのプランカードをクリック。</div>
+        </div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>ID数を指定</div>
+          <div class="step-body">
+            必要なID数（1〜100）を入力すると合計額が自動計算されます。ID数はID単位の月額料金×数量です。
+          </div>
+        </div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">3</span>決済情報入力</div>
+          <div class="step-body">
+            クレジットカード情報を入力。Squareによるセキュアな決済です。カード情報はAdavoo側には保存されません。
+          </div>
+        </div>
+        <div style="padding:10px 0;">
+          <div class="step-title"><span class="step-num">4</span>購入完了</div>
+          <div class="step-body">
+            決済成功後、契約が即時有効化されます。レシートは Square からメール送信されます。
+          </div>
+        </div>
+      </section>
 
+      <section class="card" id="partner-code">
+        <h3 class="panel-title" style="font-size:15px;">⑤ 代理店コードを後から紐付ける</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          登録時に代理店コードを入力しなかった場合、後から1回だけ紐付けができます（以降は変更不可）。
+        </p>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>アカウント画面を開く</div>
+          <div class="step-body">ヘッダーの <span class="code">アカウント</span> からアカウント画面へ。</div>
+        </div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>「代理店コード」セクション</div>
+          <div class="step-body">
+            未紐付けの場合、入力欄が表示されます。代理店から通知されたコード（<span class="code">SUP-XXXXXX</span> または <span class="code">AGT-XXXXXX</span>）を入力。
+          </div>
+        </div>
+        <div style="padding:10px 0;">
+          <div class="step-title"><span class="step-num">3</span>確認して紐付け</div>
+          <div class="step-body">
+            確認ダイアログで「OK」を押すと紐付けが確定します。<strong>以降は変更できません</strong>のでご注意ください。
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="account">
+        <h3 class="panel-title" style="font-size:15px;">⑥ アカウント管理</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          ヘッダーの <span class="code">アカウント</span> から、以下の操作ができます：
+        </p>
+        <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;">
+          <li>プロフィール確認（ログインID / スタッフID / 会社名 / メール）</li>
+          <li>連携済みモジュール一覧・連携解除</li>
+          <li>代理店コードの後付け入力・紐付け状況確認</li>
+          <li>パスワード変更（現行パスワード + 新パスワード8文字以上）</li>
+        </ul>
+      </section>
+
+      <section class="card" id="partner">
+        <h2 class="panel-title">代理店向け <span class="role-chip role-chip--partner">PARTNER</span></h2>
+        <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
+          総代理店／代理店としてAdavooを販売する会社向けの操作です。<br>
+          代理店用のログイン画面は <span class="code">partner-login.html</span> にあり、エンドユーザー用の通常ログインとは<strong>完全に別系統</strong>です。
+        </p>
+      </section>
+
+      <section class="card" id="partner-login">
+        <h3 class="panel-title" style="font-size:15px;">① 代理店ログイン</h3>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>代理店ログインページへ</div>
+          <div class="step-body">
+            URL: <span class="code">https://adapt.tamjump.com/partner-login.html</span><br>
+            タムジ社（総代理店の場合）または上位の総代理店（代理店の場合）から通知されたログインIDとパスワードでログインします。
+          </div>
+        </div>
+        <div style="padding:10px 0;">
+          <div class="step-title"><span class="step-num">2</span>初回ログイン後</div>
+          <div class="step-body">
+            ダッシュボード（<span class="code">partner-dashboard.html</span>）に自動遷移します。
+          </div>
+        </div>
+        <div class="note">
+          代理店アカウントの契約が <strong>expired（期限切れ）</strong> または <strong>terminated（停止）</strong> 状態になるとログインできなくなります。
+        </div>
+      </section>
+
+      <section class="card" id="partner-dashboard">
+        <h3 class="panel-title" style="font-size:15px;">② ダッシュボード</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          ログイン直後に表示される画面で、自分の情報・配下の状況・売上サマリーが一覧できます。
+        </p>
+        <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;">
+          <li><strong>サマリー</strong>：配下エンドユーザー数、有料契約中、配下代理店数（総代理店のみ）、当月売上・按分後支払予定（総代理店のみ）</li>
+          <li><strong>代理店情報</strong>：自社コード・種別・契約期間・按分率（総代理店のみ）・所属総代理店（代理店の場合）</li>
+          <li><strong>配下代理店</strong>（総代理店のみ）：配下代理店の一覧と状態</li>
+          <li><strong>配下エンドユーザー</strong>：自分または配下代理店に紐付くエンドユーザー一覧・スタッフ数・有料契約数</li>
+        </ul>
+      </section>
+
+      <section class="card" id="sub-agent">
+        <h3 class="panel-title" style="font-size:15px;">③ 配下代理店の登録（総代理店のみ）</h3>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>登録ボタンをクリック</div>
+          <div class="step-body">
+            配下代理店一覧の右上 <span class="code">＋ 配下代理店を登録</span> から登録ダイアログを開きます。
+          </div>
+        </div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>情報入力</div>
+          <div class="step-body">
+            代理店の会社名・ログインID・初期パスワード（8文字以上）・メール・電話番号を入力。
+          </div>
+        </div>
+        <div style="padding:10px 0;">
+          <div class="step-title"><span class="step-num">3</span>登録完了・相手先へ伝達</div>
+          <div class="step-body">
+            代理店コード（<span class="code">AGT-XXXXXX</span>）が自動発行され、<strong>初期パスワードが1回だけ表示</strong>されます。必ずコピーして代理店担当者にお伝えください。
+          </div>
+        </div>
+        <div class="note">
+          配下代理店は登録時点から1年契約で <span class="code">active</span> 状態に。契約終了日の2ヶ月前に自動通知メールが届きます。
+        </div>
+      </section>
+
+      <section class="card" id="admin">
+        <h2 class="panel-title">タムジ管理者向け <span class="role-chip role-chip--admin">TAMJ ADMIN</span></h2>
+        <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
+          タムジ社の管理アカウント（master_staff.role='tamj_admin'）専用の操作です。<br>
+          ログイン後、ヘッダーに <span class="code">管理</span> リンクが表示されるとアクセスできます。
+        </p>
+      </section>
+
+      <section class="card" id="admin-summary">
+        <h3 class="panel-title" style="font-size:15px;">① 全体サマリー</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          <span class="code">管理</span> をクリックして <span class="code">admin-dashboard.html</span> を開くと、最上部に全体メトリクスが表示されます。
+        </p>
+        <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;">
+          <li>総代理店・代理店・エンドユーザーの登録数（稼働中／全体／承認待ち）</li>
+          <li>有料契約中のsubscription数</li>
+          <li>当月売上・未払い支払予定・支払済金額</li>
+        </ul>
+      </section>
+
+      <section class="card" id="admin-partner">
+        <h3 class="panel-title" style="font-size:15px;">② 代理店管理</h3>
+
+        <p class="divider-label">総代理店の新規登録</p>
+        <div style="padding:8px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>「＋ 総代理店を登録」ボタン</div>
+          <div class="step-body">
+            代理店管理タブの右上から登録ダイアログを開きます。
+          </div>
+        </div>
+        <div style="padding:8px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>情報入力</div>
+          <div class="step-body">
+            会社名・ログインID・初期パスワード・メール・電話・<strong>按分率（%）</strong>を入力。<br>
+            按分率 = タムジ売上総額のうち、この総代理店に支払う割合。
+          </div>
+        </div>
+        <div style="padding:8px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">3</span>登録（<span class="status-pill">pending</span> 状態）</div>
+          <div class="step-body">
+            登録直後は <strong>承認待ち</strong> 状態です。コード <span class="code">SUP-XXXXXX</span> と初期パスワードが表示されるので相手先に伝達。
+          </div>
+        </div>
+        <div style="padding:8px 0;">
+          <div class="step-title"><span class="step-num">4</span>承認で契約開始</div>
+          <div class="step-body">
+            一覧で該当エントリの <span class="code">承認</span> ボタンを押すと <span class="status-pill">active</span> に変わり、1年契約が開始されます。
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="admin-ledger">
+        <h3 class="panel-title" style="font-size:15px;">③ 月次台帳・支払い完了マーク</h3>
+        <p style="color:var(--ink-muted);font-size:13px;">
+          月末のCronで自動的に前月分の売上が集計され、台帳（<span class="code">revenue_ledger</span>）に記録されます。タムジ社は実際の振込後、管理画面から「支払い完了」をマークします。
+        </p>
+        <div style="padding:8px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">1</span>月次台帳タブを開く</div>
+          <div class="step-body">
+            タブ <span class="code">月次台帳</span> を選択し、月選択ピッカーで対象月を指定します。
+          </div>
+        </div>
+        <div style="padding:8px 0;border-bottom:1px solid var(--line);">
+          <div class="step-title"><span class="step-num">2</span>エントリ確認</div>
+          <div class="step-body">
+            支払先総代理店コード・会社名・モジュール・売上総額・按分率・支払額が表示されます。
+          </div>
+        </div>
+        <div style="padding:8px 0;">
+          <div class="step-title"><span class="step-num">3</span>「支払完了」ボタン</div>
+          <div class="step-body">
+            実際に振込を行ったエントリの <span class="code">支払完了</span> ボタンを押すと状態が <span class="status-pill">paid</span> に変わり、監査ログに記録されます。
+          </div>
+        </div>
+        <div class="note">
+          <strong>原則：</strong>タムジは総代理店にのみ支払います。代理店経由の売上は上位総代理店コードに集約されて台帳に載るため、タムジ→代理店の直接支払いはありません（代理店への支払は総代理店の業務）。
+        </div>
+      </section>
+
+      <section class="card" id="faq">
+        <h2 class="panel-title">よくある質問</h2>
+        <ul class="faq-list">
+          <li>
+            <div class="faq-q">連携に使えるIDを途中で変更できますか？</div>
+            <div class="faq-a">直接の変更はできません。一度 <span class="code">解除</span> してから、新しいIDで再連携してください。</div>
+          </li>
+          <li>
+            <div class="faq-q">同じモジュールに複数のIDを紐付けできますか？</div>
+            <div class="faq-a">1つのAdavooアカウントにつき、各モジュール1IDまでです。複数アカウント切替はモジュール側の通常ログインをご利用ください。</div>
+          </li>
+          <li>
+            <div class="faq-q">連携解除するとモジュール側のデータは消えますか？</div>
+            <div class="faq-a">消えません。Adavooの連携情報のみが削除され、モジュール側のアカウント・データはそのまま残ります。</div>
+          </li>
+          <li>
+            <div class="faq-q">パスワードを変更したら連携し直しが必要ですか？</div>
+            <div class="faq-a">不要です。連携時はパスワードを保存しておらず、以降は内部チケット方式で認証するため、モジュール側でパスワードを変更しても連携は維持されます。</div>
+          </li>
+          <li>
+            <div class="faq-q">代理店コードを間違えて入力してしまいました</div>
+            <div class="faq-a">代理店コードは一度確定すると変更できない仕様です。サポートまでお問い合わせください。</div>
+          </li>
+          <li>
+            <div class="faq-q">代理店コードを後から入力することはできますか？</div>
+            <div class="faq-a">はい、アカウント画面から1回だけ入力できます。「⑤ 代理店コードを後から紐付ける」セクションをご参照ください。</div>
+          </li>
+          <li>
+            <div class="faq-q">配下代理店の初期パスワードを再表示したいのですが</div>
+            <div class="faq-a">セキュリティ上、登録時の一度しか表示されません。ご案内し忘れた場合は代理店側でパスワード変更の操作をしてもらうか、別途リセット処理（Phase 4予定）をお待ちください。</div>
+          </li>
+          <li>
+            <div class="faq-q">月次集計のタイミングはいつですか？</div>
+            <div class="faq-a">毎月1日00:05 JSTに前月分が自動集計されます。集計結果は revenue_ledger テーブルに pending 状態で記録されます。</div>
+          </li>
+          <li>
+            <div class="faq-q">うまく動かない・問題を報告したい</div>
+            <div class="faq-a">モジュール側のID・パスワードが正しいか、各モジュールの通常ログインで確認してください。解決しない場合はサポートまでご連絡ください。</div>
+          </li>
+        </ul>
+      </section>
+
+    </div>
   </div>
+
 </main>
 
 <script src="assets/common.js"></script>

@@ -58,7 +58,7 @@
 <script src="assets/common.js"></script>
 <script>
 (async function () {
-  const session = await Adapt.requireLogin('login.html');
+  const session = await Adapt.requireLogin('lp.html');
   if (!session) return;
 
   Adapt.renderHeader({ loggedIn: true, active: 'home' });

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Adavoo ｜ Vision Of Oneness</title>
+<meta name="description" content="Adavooは複数の機能やサービスをひとつにつなぐ親アプリです。それぞれの役割を分けたまま、ひとつの起点として統合する。それが、Vision Of Oneness です。" />
+<meta property="og:title" content="Adavoo ｜ Vision Of Oneness" />
+<meta property="og:description" content="医療、管理、支援、暮らし。必要な機能をひとつにつなぎ、新しい運用の世界を形にする。" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://adapt.tamjump.com/" />
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  body { background: var(--bg); }
+
+  /* ---------- Navbar ---------- */
+  .lp-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--line);
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .lp-nav__brand {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+  .lp-nav__brand-sub {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--ink-muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .lp-nav__actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .lp-nav__link {
+    color: var(--ink-muted);
+    font-size: 13px;
+    text-decoration: none;
+    padding: 8px 12px;
+  }
+  .lp-nav__link:hover { color: var(--ink); }
+
+  /* ---------- Hero ---------- */
+  .lp-hero {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 96px 32px 80px;
+    text-align: left;
+  }
+  .lp-hero__eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .lp-hero__title {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: clamp(40px, 7vw, 72px);
+    font-weight: 900;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin: 0 0 18px 0;
+  }
+  .lp-hero__tag {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: clamp(18px, 2.4vw, 24px);
+    font-weight: 700;
+    color: var(--red);
+    letter-spacing: 0.04em;
+    margin: 0 0 32px 0;
+  }
+  .lp-hero__lead {
+    font-size: 16px;
+    line-height: 1.9;
+    color: var(--ink-soft);
+    max-width: 620px;
+    margin: 0 0 40px 0;
+  }
+  .lp-hero__lead strong {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .lp-hero__cta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .lp-hero__cta .btn {
+    min-width: 180px;
+  }
+
+  /* ---------- Sections ---------- */
+  .lp-section {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 80px 32px;
+    border-top: 1px solid var(--line);
+  }
+  .lp-section__eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--red);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .lp-section__title {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 900;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+    margin: 0 0 20px 0;
+    line-height: 1.2;
+  }
+  .lp-section__lead {
+    font-size: 15px;
+    line-height: 1.9;
+    color: var(--ink-soft);
+    max-width: 720px;
+    margin: 0 0 40px 0;
+  }
+
+  /* ---------- Concept 3-column ---------- */
+  .lp-concept-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 28px;
+    margin-top: 40px;
+  }
+  .lp-concept {
+    padding: 28px 26px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .lp-concept__num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--red);
+    margin-bottom: 14px;
+  }
+  .lp-concept__title {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 10px 0;
+  }
+  .lp-concept__body {
+    font-size: 13px;
+    line-height: 1.85;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+
+  /* ---------- Modules ---------- */
+  .lp-module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  .lp-module {
+    padding: 32px 28px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  .lp-module__name {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--ink);
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
+  }
+  .lp-module__cat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .lp-module__desc {
+    font-size: 14px;
+    line-height: 1.85;
+    color: var(--ink-soft);
+    margin: 0 0 24px 0;
+    flex-grow: 1;
+  }
+  .lp-module__link {
+    font-size: 13px;
+    color: var(--red);
+    text-decoration: none;
+    font-weight: 700;
+    border-bottom: 1px solid var(--red);
+    padding-bottom: 2px;
+    align-self: flex-start;
+  }
+  .lp-module__link:hover {
+    color: var(--red-hover);
+    border-color: var(--red-hover);
+  }
+
+  /* ---------- Features ---------- */
+  .lp-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0;
+  }
+  .lp-feature {
+    padding: 28px 28px 28px 0;
+  }
+  .lp-feature__label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .lp-feature__title {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 10px 0;
+  }
+  .lp-feature__body {
+    font-size: 13px;
+    line-height: 1.85;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+
+  /* ---------- Final CTA ---------- */
+  .lp-final {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 100px 32px 120px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+  }
+  .lp-final__title {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 900;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+    margin: 0 0 20px 0;
+    line-height: 1.2;
+  }
+  .lp-final__lead {
+    font-size: 15px;
+    line-height: 1.9;
+    color: var(--ink-soft);
+    max-width: 560px;
+    margin: 0 auto 40px auto;
+  }
+  .lp-final__cta {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .lp-final__cta .btn { min-width: 180px; }
+
+  /* ---------- Footer ---------- */
+  .lp-footer {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 28px 32px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .lp-footer__brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-muted);
+    letter-spacing: 0.12em;
+  }
+  .lp-footer__links {
+    display: flex;
+    gap: 18px;
+  }
+  .lp-footer__links a {
+    font-size: 12px;
+    color: var(--ink-muted);
+    text-decoration: none;
+  }
+  .lp-footer__links a:hover { color: var(--ink); }
+
+  /* Mobile adjustments */
+  @media (max-width: 640px) {
+    .lp-hero { padding: 64px 24px 56px; }
+    .lp-section { padding: 56px 24px; }
+    .lp-final { padding: 72px 24px 96px; }
+    .lp-nav { padding: 14px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="lp-nav">
+  <a href="lp.html" class="lp-nav__brand">
+    Adavoo
+    <span class="lp-nav__brand-sub">Vision Of Oneness</span>
+  </a>
+  <div class="lp-nav__actions">
+    <a href="login.html" class="lp-nav__link">ログイン</a>
+    <a href="register.html" class="btn btn--primary btn--sm">新規登録</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="lp-hero">
+  <div class="lp-hero__eyebrow">Adavoo / VOO = Vision Of Oneness</div>
+  <h1 class="lp-hero__title">すべてを、<br>ひとつの起点へ。</h1>
+  <p class="lp-hero__tag">ひとつにつながる世界の構想。</p>
+  <p class="lp-hero__lead">
+    <strong>Adavooは、複数の機能やサービスをひとつにつなぐ親アプリです。</strong><br>
+    それぞれの役割を分けたまま、ひとつの起点として統合する。<br>
+    それが、Vision Of Oneness です。
+  </p>
+  <div class="lp-hero__cta">
+    <a href="register.html" class="btn btn--primary">新規登録（無料）</a>
+    <a href="login.html" class="btn btn--ghost">ログイン</a>
+  </div>
+</section>
+
+<!-- Concept -->
+<section class="lp-section">
+  <div class="lp-section__eyebrow">Concept</div>
+  <h2 class="lp-section__title">役割を分けたまま、<br>ひとつにつながる。</h2>
+  <p class="lp-section__lead">
+    医療、管理、支援、暮らし。必要な機能をひとつにつなぎ、新しい運用の世界を形にする。<br>
+    Adavooは、個別に最適化されたモジュール群を、ひとつのIDで横断できるプラットフォームです。
+  </p>
+
+  <div class="lp-concept-grid">
+    <div class="lp-concept">
+      <div class="lp-concept__num">01</div>
+      <h3 class="lp-concept__title">統一ID</h3>
+      <p class="lp-concept__body">
+        Adavooアカウントひとつで、各モジュールに横断アクセス。モジュールごとにログイン情報を覚える必要はありません。
+      </p>
+    </div>
+    <div class="lp-concept">
+      <div class="lp-concept__num">02</div>
+      <h3 class="lp-concept__title">自動SSO</h3>
+      <p class="lp-concept__body">
+        一度連携したモジュールは、Adavooのホームから1クリックで自動ログイン状態で開きます。
+      </p>
+    </div>
+    <div class="lp-concept">
+      <div class="lp-concept__num">03</div>
+      <h3 class="lp-concept__title">役割の分離</h3>
+      <p class="lp-concept__body">
+        各モジュールは独立したサービスとして設計・運用されます。Adavooは起点になるだけで、ひとつひとつの専門性を損ないません。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Modules -->
+<section class="lp-section">
+  <div class="lp-section__eyebrow">Modules</div>
+  <h2 class="lp-section__title">今つながっているモジュール。</h2>
+  <p class="lp-section__lead">
+    Adavooでは現在、以下のモジュールが連携可能です。順次追加予定。
+  </p>
+
+  <div class="lp-module-grid">
+    <div class="lp-module">
+      <h3 class="lp-module__name">Touchvoo</h3>
+      <div class="lp-module__cat">施設設備管理</div>
+      <p class="lp-module__desc">
+        施設設備の通報・管理会社連携・QR台帳。テナントから管理会社までの情報の流れをひとつに。現場の報告を、すぐ次の一手につなげる。
+      </p>
+      <a href="https://one-touch.tamjump.com" class="lp-module__link" target="_blank" rel="noopener">
+        Touchvoo を詳しく見る →
+      </a>
+    </div>
+    <div class="lp-module">
+      <h3 class="lp-module__name">Medvoo</h3>
+      <div class="lp-module__cat">医療介護連携</div>
+      <p class="lp-module__desc">
+        医療・介護の法人間連携OS。NDA締結・退院通知・サービス担当者会議までを、ひとつの接続で。地域全体がつながる運用へ。
+      </p>
+      <a href="https://medadapt.scsgo.co.jp" class="lp-module__link" target="_blank" rel="noopener">
+        Medvoo を詳しく見る →
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="lp-section">
+  <div class="lp-section__eyebrow">Features</div>
+  <h2 class="lp-section__title">現場の運用に、素直な仕組み。</h2>
+
+  <div class="lp-features">
+    <div class="lp-feature">
+      <div class="lp-feature__label">Security</div>
+      <h3 class="lp-feature__title">メール認証付き登録</h3>
+      <p class="lp-feature__body">
+        新規登録時にメール確認を必須化。なりすまし登録を防ぎ、法人運用に耐える基盤を提供します。
+      </p>
+    </div>
+    <div class="lp-feature">
+      <div class="lp-feature__label">Partner</div>
+      <h3 class="lp-feature__title">代理店制度</h3>
+      <p class="lp-feature__body">
+        総代理店・代理店・エンドユーザーの3階層を正式にサポート。契約ライフサイクル・月次集計・支払台帳まで標準装備。
+      </p>
+    </div>
+    <div class="lp-feature">
+      <div class="lp-feature__label">Billing</div>
+      <h3 class="lp-feature__title">ID数課金</h3>
+      <p class="lp-feature__body">
+        モジュールごとにID数で課金。必要な人数分だけ、必要なモジュールだけ。無駄のない料金体系です。
+      </p>
+    </div>
+    <div class="lp-feature">
+      <div class="lp-feature__label">Admin</div>
+      <h3 class="lp-feature__title">ダッシュボード</h3>
+      <p class="lp-feature__body">
+        エンドユーザー・代理店・タムジ社それぞれに用途別ダッシュボードを提供。見るべき指標だけを、見るべき人に。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="lp-final">
+  <h2 class="lp-final__title">Vision Of Oneness を、<br>あなたの現場にも。</h2>
+  <p class="lp-final__lead">
+    Adavooアカウントの作成は無料。各モジュールは連携・購入の2段階で、必要なものだけをご利用いただけます。
+  </p>
+  <div class="lp-final__cta">
+    <a href="register.html" class="btn btn--primary">新規登録（無料）</a>
+    <a href="login.html" class="btn btn--ghost">ログイン</a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="lp-footer">
+  <div class="lp-footer__brand">ADAVOO ／ VISION OF ONENESS ／ © TAmJump</div>
+  <div class="lp-footer__links">
+    <a href="https://tamjump.com/" target="_blank" rel="noopener">運営元</a>
+    <a href="login.html">ログイン</a>
+    <a href="register.html">新規登録</a>
+  </div>
+</footer>
+
+</body>
+</html>
