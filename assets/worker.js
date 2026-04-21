@@ -226,6 +226,15 @@ async function requirePartnerAuth(request, db) {
   return { partner: sess };
 }
 
+// タムジ管理者（master_staff.role='tamj_admin'）認証
+// 通常の requireAuth に加えてロールチェックを行う
+async function requireTamjAdmin(request, db) {
+  const r = await requireAuth(request, db);
+  if (r.error) return r;
+  if (r.user.role !== 'tamj_admin') return { error: 'forbidden_admin_only', status: 403 };
+  return r;
+}
+
 // 代理店コード形式チェック: SUP-XXXXXX (総代理店) / AGT-XXXXXX (代理店)
 const PARTNER_CODE_RE = /^(SUP|AGT)-\d{6}$/;
 function isValidPartnerCodeFormat(code) {
@@ -261,6 +270,15 @@ const nextAgentId = async (db) => {
   ).first();
   const n = row ? parseInt(row.partner_id.replace('AGT-', ''), 10) + 1 : 1;
   return 'AGT-' + String(n).padStart(6, '0');
+};
+
+// 総代理店（SUP-XXXXXX）の次の連番 — タムジが総代理店を登録する際に使用
+const nextSuperId = async (db) => {
+  const row = await db.prepare(
+    "SELECT partner_id FROM partners WHERE type = 'super' AND partner_id LIKE 'SUP-%' ORDER BY partner_id DESC LIMIT 1"
+  ).first();
+  const n = row ? parseInt(row.partner_id.replace('SUP-', ''), 10) + 1 : 1;
+  return 'SUP-' + String(n).padStart(6, '0');
 };
 
 // =========================================================
@@ -994,6 +1012,231 @@ ${verifyUrl}
             contract_end_at: oneYearLater,
             status: 'active'
           }
+        }, 200, cors);
+      }
+
+      // =============== タムジ管理画面（master_staff.role='tamj_admin' 専用） ===============
+
+      // 管理画面サマリー（全体俯瞰）
+      if (path === '/api/admin/summary' && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const rows = await db.batch([
+          db.prepare("SELECT COUNT(*) AS cnt FROM partners WHERE type = 'super'"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM partners WHERE type = 'super' AND status = 'active'"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM partners WHERE type = 'super' AND status = 'pending'"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM partners WHERE type = 'agent'"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM partners WHERE type = 'agent' AND status = 'active'"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM master_companies"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM master_companies WHERE partner_code IS NULL"),
+          db.prepare("SELECT COUNT(*) AS cnt FROM subscriptions WHERE status = 'active'"),
+        ]);
+        const [
+          supTotal, supActive, supPending,
+          agtTotal, agtActive,
+          compTotal, compDirect, subsActive
+        ] = rows.map(x => x.results?.[0]?.cnt || 0);
+
+        const ym = new Date().toISOString().slice(0, 7);
+        const ledger = await db.prepare(
+          "SELECT COUNT(*) AS cnt, COALESCE(SUM(gross_amount),0) AS gross, COALESCE(SUM(share_amount),0) AS share, " +
+          "       SUM(CASE WHEN status='pending' THEN share_amount ELSE 0 END) AS pending_pay, " +
+          "       SUM(CASE WHEN status='paid'    THEN share_amount ELSE 0 END) AS paid " +
+          "  FROM revenue_ledger WHERE year_month = ?"
+        ).bind(ym).first();
+
+        return json({
+          ok: true,
+          summary: {
+            super_total: supTotal, super_active: supActive, super_pending: supPending,
+            agent_total: agtTotal, agent_active: agtActive,
+            company_total: compTotal, company_direct: compDirect,
+            active_subscription_count: subsActive
+          },
+          current_month_ledger: {
+            year_month: ym,
+            entry_count: ledger?.cnt || 0,
+            gross_amount: ledger?.gross || 0,
+            share_amount: ledger?.share || 0,
+            pending_payout: ledger?.pending_pay || 0,
+            paid_payout: ledger?.paid || 0
+          }
+        }, 200, cors);
+      }
+
+      // 全代理店（総代理店＋代理店）一覧
+      if (path === '/api/admin/partners' && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const rows = await db.prepare(
+          "SELECT p.partner_id, p.type, p.parent_partner_id, p.company_name, p.code, p.login_id, " +
+          "       p.email, p.phone, p.contract_start_at, p.contract_end_at, p.status, p.revenue_share_pct, " +
+          "       p.created_at, p.auto_end_notified_at, " +
+          "       (SELECT COUNT(*) FROM master_companies mc WHERE mc.partner_code = p.code) AS direct_customer_count, " +
+          "       (SELECT COUNT(*) FROM partners ap WHERE ap.parent_partner_id = p.partner_id) AS child_agent_count " +
+          "  FROM partners p " +
+          " ORDER BY p.type ASC, p.created_at DESC"
+        ).all();
+        return json({ ok: true, partners: rows.results || [] }, 200, cors);
+      }
+
+      // 総代理店を新規登録（status='pending' で登録、後で承認）
+      if (path === '/api/admin/partners' && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const b = (await request.json()) || {};
+        const { company_name, login_id, password, email, phone, revenue_share_pct, bank_info } = b;
+        if (!company_name || !login_id || !password) {
+          return json({ error: 'missing_fields', fields: ['company_name','login_id','password'].filter(k => !b?.[k]) }, 400, cors);
+        }
+        if (password.length < 8) return json({ error: 'password_too_short' }, 400, cors);
+        if (!/^[a-zA-Z0-9_-]{3,40}$/.test(login_id)) return json({ error: 'invalid_login_id' }, 400, cors);
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'invalid_email' }, 400, cors);
+
+        const sharePct = (revenue_share_pct === null || revenue_share_pct === undefined || revenue_share_pct === '')
+          ? null
+          : Number(revenue_share_pct);
+        if (sharePct !== null && (Number.isNaN(sharePct) || sharePct < 0 || sharePct > 100)) {
+          return json({ error: 'invalid_share_pct' }, 400, cors);
+        }
+
+        const exists = await db.prepare("SELECT 1 FROM partners WHERE login_id = ?").bind(login_id).first();
+        if (exists) return json({ error: 'login_id_taken' }, 409, cors);
+
+        const supId = await nextSuperId(db);
+        const passwordHash = await sha256(password);
+        const bankJson = bank_info ? JSON.stringify(bank_info) : null;
+
+        // 登録時は status='pending' (契約日はまだセットしない=承認時に確定)
+        await db.prepare(
+          "INSERT INTO partners (partner_id, type, parent_partner_id, company_name, code, login_id, password_hash, " +
+          "  email, phone, status, revenue_share_pct, bank_info_json) " +
+          "VALUES (?, 'super', NULL, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)"
+        ).bind(
+          supId, company_name, supId, login_id, passwordHash,
+          email || null, phone || null, sharePct, bankJson
+        ).run();
+
+        await audit(db, 'admin_super_created', r.user.staff_id, r.user.login_id, {
+          new_partner_id: supId, login_id
+        }, request);
+
+        return json({
+          ok: true,
+          super_partner: {
+            partner_id: supId, code: supId, company_name, login_id,
+            email: email || null, status: 'pending',
+            revenue_share_pct: sharePct
+          }
+        }, 200, cors);
+      }
+
+      // 総代理店を承認（status: 'pending' → 'active'、契約期間確定）
+      const approveMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/approve$/);
+      if (approveMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = approveMatch[1];
+
+        const p = await db.prepare("SELECT * FROM partners WHERE partner_id = ?").bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (p.status !== 'pending') return json({ error: 'not_pending', current_status: p.status }, 409, cors);
+
+        const now = nowISO();
+        const oneYearLater = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+        await db.prepare(
+          "UPDATE partners SET status = 'active', contract_start_at = ?, contract_end_at = ?, " +
+          "  auto_end_notified_at = NULL, updated_at = datetime('now') WHERE partner_id = ?"
+        ).bind(now, oneYearLater, partnerId).run();
+
+        await audit(db, 'admin_partner_approved', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId, contract_start_at: now, contract_end_at: oneYearLater
+        }, request);
+
+        return json({
+          ok: true,
+          partner: { partner_id: partnerId, status: 'active', contract_start_at: now, contract_end_at: oneYearLater }
+        }, 200, cors);
+      }
+
+      // 月次売上台帳の取得
+      const ledgerMatch = path.match(/^\/api\/admin\/ledger\/(\d{4}-\d{2})$/);
+      if (ledgerMatch && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const ym = ledgerMatch[1];
+
+        const rows = await db.prepare(
+          "SELECT rl.id, rl.year_month, rl.partner_code, rl.app_name, rl.subscription_id, " +
+          "       rl.gross_amount, rl.share_pct, rl.share_amount, rl.status, rl.paid_at, rl.created_at, " +
+          "       p.company_name AS partner_company_name " +
+          "  FROM revenue_ledger rl " +
+          "  LEFT JOIN partners p ON p.code = rl.partner_code " +
+          " WHERE rl.year_month = ? " +
+          " ORDER BY rl.partner_code ASC, rl.app_name ASC"
+        ).bind(ym).all();
+
+        const summary = await db.prepare(
+          "SELECT COUNT(*) AS cnt, COALESCE(SUM(gross_amount),0) AS gross, COALESCE(SUM(share_amount),0) AS share, " +
+          "       SUM(CASE WHEN status='pending' THEN share_amount ELSE 0 END) AS pending_pay, " +
+          "       SUM(CASE WHEN status='paid'    THEN share_amount ELSE 0 END) AS paid " +
+          "  FROM revenue_ledger WHERE year_month = ?"
+        ).bind(ym).first();
+
+        return json({
+          ok: true,
+          year_month: ym,
+          entries: rows.results || [],
+          summary: {
+            entry_count: summary?.cnt || 0,
+            gross_amount: summary?.gross || 0,
+            share_amount: summary?.share || 0,
+            pending_payout: summary?.pending_pay || 0,
+            paid_payout: summary?.paid || 0
+          }
+        }, 200, cors);
+      }
+
+      // 台帳エントリに「支払い完了」マーク
+      const markPaidMatch = path.match(/^\/api\/admin\/ledger\/(\d+)\/mark-paid$/);
+      if (markPaidMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const id = Number(markPaidMatch[1]);
+
+        const row = await db.prepare("SELECT * FROM revenue_ledger WHERE id = ?").bind(id).first();
+        if (!row) return json({ error: 'ledger_not_found' }, 404, cors);
+        if (row.status !== 'pending') return json({ error: 'not_pending', current_status: row.status }, 409, cors);
+
+        await db.prepare(
+          "UPDATE revenue_ledger SET status = 'paid', paid_at = datetime('now') WHERE id = ?"
+        ).bind(id).run();
+
+        await audit(db, 'admin_ledger_paid', r.user.staff_id, r.user.login_id, {
+          ledger_id: id, year_month: row.year_month, partner_code: row.partner_code, amount: row.share_amount
+        }, request);
+
+        return json({ ok: true, id, status: 'paid', paid_at: nowISO() }, 200, cors);
+      }
+
+      // 売上俯瞰（全月・月別集計）
+      if (path === '/api/admin/revenue' && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const byMonth = await db.prepare(
+          "SELECT year_month, COUNT(*) AS entry_count, SUM(gross_amount) AS gross, SUM(share_amount) AS share, " +
+          "       SUM(CASE WHEN status='pending' THEN share_amount ELSE 0 END) AS pending_pay, " +
+          "       SUM(CASE WHEN status='paid'    THEN share_amount ELSE 0 END) AS paid " +
+          "  FROM revenue_ledger GROUP BY year_month ORDER BY year_month DESC LIMIT 12"
+        ).all();
+
+        return json({
+          ok: true,
+          months: byMonth.results || []
         }, 200, cors);
       }
 

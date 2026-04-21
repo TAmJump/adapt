@@ -135,12 +135,14 @@ async function requirePartnerLogin(redirectTo = 'partner-login.html') {
 
 function renderHeader({ loggedIn = false, active = '' } = {}) {
   const user = AdaptAPI.getUser();
+  const isTamjAdmin = user && user.role === 'tamj_admin';
 
   const navInner = loggedIn
     ? `
       <a href="index.html"  class="${active === 'home'    ? 'active' : ''}">ホーム</a>
       <a href="guide.html"  class="${active === 'guide'   ? 'active' : ''}">ガイド</a>
       <a href="account.html" class="${active === 'account' ? 'active' : ''}">アカウント</a>
+      ${isTamjAdmin ? `<a href="admin-dashboard.html" class="${active === 'admin' ? 'active' : ''}">管理</a>` : ''}
       <button id="adaptLogoutBtn" type="button">ログアウト</button>
     `
     : `

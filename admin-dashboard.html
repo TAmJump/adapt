@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>タムジ管理画面｜Adapt</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 8px 0 4px 0;
+  }
+  .metric {
+    border: 1px solid var(--line, #e3e3e0);
+    border-radius: 6px;
+    padding: 14px 16px;
+    background: #fff;
+  }
+  .metric__label {
+    font-size: 12px; color: #666; letter-spacing: 0.04em; margin-bottom: 4px;
+  }
+  .metric__value {
+    font-size: 24px; font-weight: 700; color: #0a0e1a; font-variant-numeric: tabular-nums;
+  }
+  .metric__unit { font-size: 12px; color: #666; font-weight: 400; margin-left: 4px; }
+  .metric--highlight { background: #fff8e1; border-color: #f7c85c; }
+
+  .tab-bar {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--line, #e3e3e0); margin-bottom: 16px;
+  }
+  .tab-btn {
+    background: none; border: 0; border-bottom: 2px solid transparent;
+    padding: 10px 16px; cursor: pointer; font-size: 13px; color: #666;
+  }
+  .tab-btn.active { color: #c4432b; border-bottom-color: #c4432b; font-weight: 700; }
+
+  .status-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  }
+  .status-active     { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .status-pending    { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .status-expired    { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+  .status-terminated { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9000;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal {
+    background: #fff; border-radius: 8px; padding: 24px 28px;
+    max-width: 520px; width: calc(100% - 32px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 16px 0; font-size: 16px; }
+  .modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .credentials-box {
+    background: #fff8e1; border: 1px solid #f7c85c; border-radius: 6px;
+    padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.7;
+  }
+  .credentials-box .mono { font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="container">
+  <section class="page-intro">
+    <p class="section-label">TAmJump Admin</p>
+    <h1>タムジ管理画面</h1>
+    <p>代理店・売上・支払い台帳の全体管理</p>
+  </section>
+
+  <div class="stack">
+
+    <!-- 全体サマリー -->
+    <section class="card">
+      <h2 class="panel-title">全体サマリー</h2>
+      <div id="summaryContent"><p class="muted">読み込み中…</p></div>
+    </section>
+
+    <!-- タブ -->
+    <section class="card">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="partners">代理店管理</button>
+        <button class="tab-btn" data-tab="ledger">月次台帳</button>
+        <button class="tab-btn" data-tab="revenue">売上推移</button>
+      </div>
+
+      <!-- 代理店管理タブ -->
+      <div id="tab-partners">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h2 class="panel-title" style="margin:0;">代理店一覧</h2>
+          <button class="btn btn--primary btn--sm" id="addSuperBtn" type="button">＋ 総代理店を登録</button>
+        </div>
+        <div id="partnersContent"><p class="muted">読み込み中…</p></div>
+      </div>
+
+      <!-- 月次台帳タブ -->
+      <div id="tab-ledger" style="display:none;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <h2 class="panel-title" style="margin:0;">月次売上台帳</h2>
+          <input type="month" id="ledgerMonthPicker" style="padding:6px 10px; border:1px solid var(--line,#e3e3e0); border-radius:4px;" />
+          <button class="btn btn--ghost btn--sm" id="reloadLedgerBtn" type="button">再読み込み</button>
+        </div>
+        <div id="ledgerContent"><p class="muted">月を選択してください。</p></div>
+      </div>
+
+      <!-- 売上推移タブ -->
+      <div id="tab-revenue" style="display:none;">
+        <h2 class="panel-title">月別売上推移（直近12ヶ月）</h2>
+        <div id="revenueContent"><p class="muted">読み込み中…</p></div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div id="modalWrap" style="display:none;"></div>
+
+<script src="assets/common.js"></script>
+<script>
+(async function () {
+  const session = await Adapt.requireLogin('login.html');
+  if (!session) return;
+
+  // tamj_admin 以外はトップへ
+  if (session.user.role !== 'tamj_admin') {
+    alert('この画面はタムジ社管理者のみアクセス可能です。');
+    location.href = 'index.html';
+    return;
+  }
+
+  Adapt.renderHeader({ loggedIn: true, active: '' });
+  Adapt.bindPasswordToggles();
+
+  // 初期ロード
+  loadSummary();
+  loadPartners();
+
+  // タブ切替
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ['partners','ledger','revenue'].forEach(k => {
+        document.getElementById('tab-' + k).style.display = (k === btn.dataset.tab) ? '' : 'none';
+      });
+      if (btn.dataset.tab === 'revenue') loadRevenue();
+    });
+  });
+
+  // 月次台帳
+  const today = new Date();
+  const thisYM = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+  document.getElementById('ledgerMonthPicker').value = thisYM;
+  document.getElementById('ledgerMonthPicker').addEventListener('change', loadLedger);
+  document.getElementById('reloadLedgerBtn').addEventListener('click', loadLedger);
+  loadLedger();
+
+  // 総代理店登録
+  document.getElementById('addSuperBtn').addEventListener('click', openAddSuperModal);
+
+  // --- サマリー ---
+  async function loadSummary() {
+    const el = document.getElementById('summaryContent');
+    try {
+      const r = await AdaptAPI.call('/api/admin/summary');
+      const s = r.summary;
+      const l = r.current_month_ledger;
+      el.innerHTML = `
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="metric__label">総代理店</div>
+            <div class="metric__value">${s.super_active}<span class="metric__unit">/ ${s.super_total}社</span></div>
+            ${s.super_pending > 0 ? `<div style="font-size:11px; color:#92400e; margin-top:4px;">承認待ち ${s.super_pending}件</div>` : ''}
+          </div>
+          <div class="metric">
+            <div class="metric__label">代理店</div>
+            <div class="metric__value">${s.agent_active}<span class="metric__unit">/ ${s.agent_total}社</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">エンドユーザー</div>
+            <div class="metric__value">${s.company_total}<span class="metric__unit">社</span></div>
+            <div style="font-size:11px; color:#666; margin-top:4px;">うち直販 ${s.company_direct}社</div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">有料契約中</div>
+            <div class="metric__value">${s.active_subscription_count}<span class="metric__unit">件</span></div>
+          </div>
+          <div class="metric metric--highlight">
+            <div class="metric__label">当月売上（${l.year_month}）</div>
+            <div class="metric__value">¥${l.gross_amount.toLocaleString()}</div>
+          </div>
+          <div class="metric metric--highlight">
+            <div class="metric__label">未払い支払予定</div>
+            <div class="metric__value">¥${l.pending_payout.toLocaleString()}</div>
+            <div style="font-size:11px; color:#666; margin-top:4px;">支払済 ¥${l.paid_payout.toLocaleString()}</div>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  // --- 代理店一覧 ---
+  async function loadPartners() {
+    const el = document.getElementById('partnersContent');
+    try {
+      const r = await AdaptAPI.call('/api/admin/partners');
+      const list = r.partners || [];
+      if (list.length === 0) {
+        el.innerHTML = `<p class="muted">まだ代理店が登録されていません。</p>`;
+        return;
+      }
+      // 総代理店と代理店を分けて表示
+      const supers = list.filter(p => p.type === 'super');
+      const agents = list.filter(p => p.type === 'agent');
+
+      el.innerHTML = `
+        <h3 style="margin-top:8px;">総代理店 (${supers.length})</h3>
+        ${renderPartnerTable(supers, true)}
+        <h3 style="margin-top:24px;">代理店 (${agents.length})</h3>
+        ${renderPartnerTable(agents, false)}
+      `;
+
+      el.querySelectorAll('[data-approve]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = btn.dataset.approve;
+          if (!confirm(pid + ' を承認して契約開始しますか？\n（契約期間: 承認日〜1年後）')) return;
+          btn.disabled = true;
+          try {
+            await AdaptAPI.call(`/api/admin/partners/${pid}/approve`, { method: 'POST' });
+            Adapt.toast('承認しました', 'success');
+            loadSummary();
+            loadPartners();
+          } catch (e) {
+            Adapt.toast('承認失敗: ' + e.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  function renderPartnerTable(list, isSuper) {
+    if (list.length === 0) return `<p class="muted">なし</p>`;
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th>コード</th><th>会社名</th><th>ログインID</th>
+            ${isSuper ? '<th>按分率</th>' : '<th>所属</th>'}
+            <th>配下</th><th>契約期間</th><th>状態</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map(p => `
+            <tr>
+              <td class="mono">${Adapt.escapeHTML(p.code)}</td>
+              <td>${Adapt.escapeHTML(p.company_name)}</td>
+              <td class="mono">${Adapt.escapeHTML(p.login_id)}</td>
+              ${isSuper
+                ? `<td class="mono">${p.revenue_share_pct != null ? p.revenue_share_pct + '%' : '-'}</td>`
+                : `<td class="mono">${Adapt.escapeHTML(p.parent_partner_id || '-')}</td>`
+              }
+              <td class="mono">
+                ${isSuper ? `代理店 ${p.child_agent_count}社 / ` : ''}
+                ユーザー ${p.direct_customer_count}社
+              </td>
+              <td class="mono">${p.contract_start_at ? formatDate(p.contract_start_at) + ' 〜 ' + formatDate(p.contract_end_at) : '-'}</td>
+              <td><span class="status-badge status-${p.status}">${statusLabel(p.status)}</span></td>
+              <td>
+                ${p.status === 'pending' ? `<button class="btn btn--primary btn--sm" data-approve="${p.partner_id}">承認</button>` : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // --- 月次台帳 ---
+  async function loadLedger() {
+    const ym = document.getElementById('ledgerMonthPicker').value;
+    const el = document.getElementById('ledgerContent');
+    if (!ym) { el.innerHTML = '<p class="muted">月を選択してください。</p>'; return; }
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await AdaptAPI.call('/api/admin/ledger/' + ym);
+      const entries = r.entries || [];
+      const s = r.summary;
+
+      const summaryHtml = `
+        <div class="metric-grid" style="margin-bottom:16px;">
+          <div class="metric">
+            <div class="metric__label">エントリ数</div>
+            <div class="metric__value">${s.entry_count}<span class="metric__unit">件</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">売上総額</div>
+            <div class="metric__value">¥${s.gross_amount.toLocaleString()}</div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">按分後支払額</div>
+            <div class="metric__value">¥${s.share_amount.toLocaleString()}</div>
+          </div>
+          <div class="metric metric--highlight">
+            <div class="metric__label">未払い</div>
+            <div class="metric__value">¥${s.pending_payout.toLocaleString()}</div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">支払済</div>
+            <div class="metric__value">¥${s.paid_payout.toLocaleString()}</div>
+          </div>
+        </div>
+      `;
+
+      if (entries.length === 0) {
+        el.innerHTML = summaryHtml + `<p class="muted">この月の台帳エントリはまだありません。月末のCronバッチで自動生成されます（Phase 3e実装予定）。</p>`;
+        return;
+      }
+
+      el.innerHTML = summaryHtml + `
+        <table>
+          <thead><tr>
+            <th>支払先コード</th><th>総代理店名</th><th>モジュール</th>
+            <th>売上</th><th>按分率</th><th>支払額</th>
+            <th>状態</th><th>支払日</th><th>操作</th>
+          </tr></thead>
+          <tbody>
+            ${entries.map(e => `
+              <tr>
+                <td class="mono">${Adapt.escapeHTML(e.partner_code)}</td>
+                <td>${Adapt.escapeHTML(e.partner_company_name || '-')}</td>
+                <td class="mono">${Adapt.escapeHTML(e.app_name)}</td>
+                <td class="mono">¥${(e.gross_amount || 0).toLocaleString()}</td>
+                <td class="mono">${e.share_pct}%</td>
+                <td class="mono">¥${(e.share_amount || 0).toLocaleString()}</td>
+                <td><span class="status-badge status-${e.status === 'paid' ? 'active' : e.status === 'pending' ? 'pending' : 'expired'}">${ledgerStatusLabel(e.status)}</span></td>
+                <td class="mono">${e.paid_at ? formatDate(e.paid_at) : '-'}</td>
+                <td>
+                  ${e.status === 'pending'
+                    ? `<button class="btn btn--primary btn--sm" data-mark-paid="${e.id}">支払完了</button>`
+                    : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      el.querySelectorAll('[data-mark-paid]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.markPaid;
+          if (!confirm('このエントリを「支払い完了」にマークしますか？\n※ この操作は監査ログに記録されます。')) return;
+          btn.disabled = true;
+          try {
+            await AdaptAPI.call(`/api/admin/ledger/${id}/mark-paid`, { method: 'POST' });
+            Adapt.toast('支払い完了としてマークしました', 'success');
+            loadSummary();
+            loadLedger();
+          } catch (e) {
+            Adapt.toast('失敗: ' + e.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  // --- 売上推移 ---
+  async function loadRevenue() {
+    const el = document.getElementById('revenueContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await AdaptAPI.call('/api/admin/revenue');
+      const months = r.months || [];
+      if (months.length === 0) {
+        el.innerHTML = `<p class="muted">売上台帳のデータがまだありません。月末のCronバッチで自動生成されます（Phase 3e実装予定）。</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>年月</th><th>エントリ数</th><th>売上総額</th><th>按分後支払額</th><th>未払い</th><th>支払済</th>
+          </tr></thead>
+          <tbody>
+            ${months.map(m => `
+              <tr>
+                <td class="mono">${Adapt.escapeHTML(m.year_month)}</td>
+                <td class="mono">${m.entry_count}</td>
+                <td class="mono">¥${(m.gross || 0).toLocaleString()}</td>
+                <td class="mono">¥${(m.share || 0).toLocaleString()}</td>
+                <td class="mono">¥${(m.pending_pay || 0).toLocaleString()}</td>
+                <td class="mono">¥${(m.paid || 0).toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  // --- 総代理店登録モーダル ---
+  function openAddSuperModal() {
+    const wrap = document.getElementById('modalWrap');
+    wrap.style.display = '';
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="modalBackdrop">
+        <div class="modal">
+          <h3>総代理店を登録</h3>
+          <p class="muted" style="font-size:12px; margin:0 0 12px 0;">
+            登録後は <strong>承認待ち</strong> 状態になります。「承認」ボタンで契約開始となります。<br>
+            初期パスワードは登録後に画面表示されますので、必ず控えてください。
+          </p>
+          <div id="supFormMsg"></div>
+          <form id="supForm" class="stack" novalidate>
+            <div class="field">
+              <label for="supCompany">会社名 <span class="req">*</span></label>
+              <input id="supCompany" type="text" required maxlength="120" />
+            </div>
+            <div class="field">
+              <label for="supLoginId">ログインID <span class="req">*</span></label>
+              <input id="supLoginId" type="text" required />
+              <div class="hint">3〜40文字の半角英数字・<code>-</code>・<code>_</code></div>
+            </div>
+            <div class="field">
+              <label for="supPassword">初期パスワード <span class="req">*</span></label>
+              <div class="pw-wrap">
+                <input id="supPassword" type="password" required minlength="8" />
+                <button type="button" class="pw-toggle" data-pw="supPassword">表示</button>
+              </div>
+              <div class="hint">8文字以上（初回ログイン後に代理店側で変更）</div>
+            </div>
+            <div class="field">
+              <label for="supEmail">メール</label>
+              <input id="supEmail" type="email" />
+              <div class="hint">契約終了通知等の送信先</div>
+            </div>
+            <div class="field">
+              <label for="supPhone">電話</label>
+              <input id="supPhone" type="tel" />
+            </div>
+            <div class="field">
+              <label for="supSharePct">按分率（%） <span class="req">*</span></label>
+              <input id="supSharePct" type="number" min="0" max="100" step="0.1" value="30" />
+              <div class="hint">タムジ売上総額のうち、この総代理店に支払う割合</div>
+            </div>
+          </form>
+          <div class="modal-actions">
+            <button class="btn btn--ghost" id="supCancelBtn" type="button">キャンセル</button>
+            <button class="btn btn--primary" id="supSubmitBtn" type="button">登録する</button>
+          </div>
+        </div>
+      </div>
+    `;
+    Adapt.bindPasswordToggles();
+    document.getElementById('supCancelBtn').addEventListener('click', closeModal);
+    document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'modalBackdrop') closeModal();
+    });
+    document.getElementById('supSubmitBtn').addEventListener('click', submitSuper);
+  }
+
+  function closeModal() {
+    const wrap = document.getElementById('modalWrap');
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+  }
+
+  async function submitSuper() {
+    const msgEl = document.getElementById('supFormMsg');
+    const btn   = document.getElementById('supSubmitBtn');
+    msgEl.innerHTML = '';
+    const body = {
+      company_name: document.getElementById('supCompany').value.trim(),
+      login_id: document.getElementById('supLoginId').value.trim(),
+      password: document.getElementById('supPassword').value,
+      email: document.getElementById('supEmail').value.trim() || undefined,
+      phone: document.getElementById('supPhone').value.trim() || undefined,
+      revenue_share_pct: document.getElementById('supSharePct').value
+    };
+    if (!body.company_name || !body.login_id || !body.password) {
+      msgEl.innerHTML = '<div class="msg msg--err">必須項目を入力してください。</div>';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = '登録中…';
+    try {
+      const r = await AdaptAPI.call('/api/admin/partners', { method: 'POST', body });
+      showCredentials(r.super_partner, body.password);
+      loadSummary();
+      loadPartners();
+    } catch (e) {
+      const map = {
+        login_id_taken: 'このログインIDは既に使われています。',
+        password_too_short: 'パスワードは8文字以上にしてください。',
+        invalid_login_id: 'ログインIDの形式が正しくありません。',
+        invalid_email: 'メールアドレスの形式が正しくありません。',
+        invalid_share_pct: '按分率は0〜100の数値で指定してください。',
+        missing_fields: '必須項目を入力してください。'
+      };
+      msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = '登録する';
+    }
+  }
+
+  function showCredentials(partner, plainPassword) {
+    const wrap = document.getElementById('modalWrap');
+    wrap.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal">
+          <h3>登録完了（承認待ち）</h3>
+          <p>総代理店を登録しました。以下の情報を相手先にお伝えください。</p>
+          <p class="muted" style="font-size:12px;">
+            現在は <strong>承認待ち</strong> 状態です。代理店一覧の「承認」ボタンを押すと契約開始となります。
+          </p>
+          <div class="credentials-box">
+            <div>総代理店コード: <span class="mono">${Adapt.escapeHTML(partner.code)}</span></div>
+            <div>ログインID: <span class="mono">${Adapt.escapeHTML(partner.login_id)}</span></div>
+            <div>初期パスワード: <span class="mono">${Adapt.escapeHTML(plainPassword)}</span></div>
+            <div>按分率: <span class="mono">${partner.revenue_share_pct != null ? partner.revenue_share_pct + '%' : '-'}</span></div>
+            <div style="margin-top:6px; font-size:11px; color:#8a6400;">
+              ※ このパスワードは再表示されません。必ずコピーして控えてください。
+            </div>
+          </div>
+          <p style="font-size:12px; color:#555;">
+            代理店側ログインURL: <br>
+            <span class="mono" style="word-break:break-all;">${location.origin}/partner-login.html</span>
+          </p>
+          <div class="modal-actions">
+            <button class="btn btn--primary" id="credOkBtn" type="button">閉じる</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('credOkBtn').addEventListener('click', closeModal);
+  }
+
+  // --- ユーティリティ ---
+  function formatDate(s) {
+    if (!s) return '-';
+    const d = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+  function statusLabel(s) {
+    const map = { active: '稼働中', pending: '承認待ち', expired: '契約終了', terminated: '停止' };
+    return map[s] || s;
+  }
+  function ledgerStatusLabel(s) {
+    const map = { pending: '未払い', paid: '支払済', canceled: '取消' };
+    return map[s] || s;
+  }
+})();
+</script>
+</body>
+</html>
