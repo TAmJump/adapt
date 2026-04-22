@@ -88,6 +88,7 @@
       <div class="tab-bar">
         <button class="tab-btn active" data-tab="partners">代理店管理</button>
         <button class="tab-btn" data-tab="requests">契約申請 <span id="reqBadge" style="display:none;background:#c4432b;color:#fff;border-radius:100px;padding:1px 7px;font-size:10px;margin-left:4px;">0</span></button>
+        <button class="tab-btn" data-tab="invitations">招待管理</button>
         <button class="tab-btn" data-tab="ledger">月次台帳</button>
         <button class="tab-btn" data-tab="revenue">売上推移</button>
       </div>
@@ -108,6 +109,18 @@
           <button class="btn btn--ghost btn--sm" id="reloadReqBtn" type="button">再読み込み</button>
         </div>
         <div id="requestsContent"><p class="muted">読み込み中…</p></div>
+      </div>
+
+      <!-- 招待管理タブ（Phase 4-3b） -->
+      <div id="tab-invitations" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h2 class="panel-title" style="margin:0;">招待管理</h2>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn--ghost btn--sm" id="reloadInvBtn" type="button">再読み込み</button>
+            <button class="btn btn--primary btn--sm" id="newInviteBtn" type="button">＋ 総代理店を招待</button>
+          </div>
+        </div>
+        <div id="invitationsContent"><p class="muted">読み込み中…</p></div>
       </div>
 
       <!-- 月次台帳タブ -->
@@ -158,14 +171,17 @@
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['partners','requests','ledger','revenue'].forEach(k => {
+      ['partners','requests','invitations','ledger','revenue'].forEach(k => {
         document.getElementById('tab-' + k).style.display = (k === btn.dataset.tab) ? '' : 'none';
       });
       if (btn.dataset.tab === 'revenue') loadRevenue();
       if (btn.dataset.tab === 'requests') loadRequests();
+      if (btn.dataset.tab === 'invitations') loadInvitations();
     });
   });
   document.getElementById('reloadReqBtn').addEventListener('click', loadRequests);
+  document.getElementById('reloadInvBtn').addEventListener('click', loadInvitations);
+  document.getElementById('newInviteBtn').addEventListener('click', openNewInviteModal);
 
   // 月次台帳
   const today = new Date();
@@ -764,6 +780,159 @@
           `}
         </div>
       </div>`;
+  }
+
+  // =====================================================
+  // Phase 4-3b: 招待管理
+  // =====================================================
+  async function loadInvitations() {
+    const el = document.getElementById('invitationsContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await AdaptAPI.call('/api/admin/partner-invitations');
+      const list = r.invitations || [];
+      if (list.length === 0) {
+        el.innerHTML = `<p class="muted">発行済みの招待はありません。右上の「＋ 総代理店を招待」から発行してください。</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>招待先メール</th><th>種別</th><th>招待元</th><th>契約月数</th>
+            <th>按分率</th><th>状態</th><th>期限</th><th>結果</th><th>操作</th>
+          </tr></thead>
+          <tbody>
+            ${list.map(inv => {
+              const statusBadge = {
+                issued: '<span class="status-badge status-pending">発行中</span>',
+                accepted: '<span class="status-badge status-active">受付済</span>',
+                expired: '<span class="status-badge status-expired">期限切れ</span>',
+                revoked: '<span class="status-badge status-expired">取消</span>'
+              }[inv.status] || inv.status;
+              const expiresSoon = inv.status === 'issued' && new Date(inv.expires_at) < new Date(Date.now() + 2 * 86400000);
+              return `
+                <tr>
+                  <td>${Adapt.escapeHTML(inv.invited_email)}</td>
+                  <td>${inv.invited_role === 'super' ? '総代理店' : '代理店'}</td>
+                  <td>${inv.parent_company_name ? Adapt.escapeHTML(inv.parent_company_name) : '<span class="muted">タムジ社</span>'}</td>
+                  <td class="mono">${inv.initial_contract_months}ヶ月</td>
+                  <td class="mono">${inv.initial_revenue_share_pct != null ? inv.initial_revenue_share_pct + '%' : '-'}</td>
+                  <td>${statusBadge}</td>
+                  <td class="mono" ${expiresSoon ? 'style="color:#b91c1c;"' : ''}>${new Date(inv.expires_at).toLocaleDateString('ja-JP')}${expiresSoon ? ' ⚠' : ''}</td>
+                  <td>${inv.resulted_company_name ? Adapt.escapeHTML(inv.resulted_company_name) : '-'}</td>
+                  <td>
+                    ${inv.status === 'issued' ? `
+                      <button class="btn btn--sm" data-resend="${inv.id}"${(inv.resend_count || 0) >= 5 ? ' disabled' : ''}>再送(${inv.resend_count || 0})</button>
+                      <button class="btn btn--sm" data-revoke="${inv.id}" style="color:#b91c1c;">取消</button>
+                    ` : '-'}
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+
+      el.querySelectorAll('[data-resend]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('招待メールを再送しますか？')) return;
+          try {
+            const r = await AdaptAPI.call(`/api/admin/partner-invitations/${btn.dataset.resend}/resend`, { method: 'POST' });
+            Adapt.toast(`再送しました（計${r.resend_count}回）`, 'success');
+            loadInvitations();
+          } catch (e) {
+            const m = { resend_limit_reached: '再送上限（5回）に達しています', invalid_status: '発行中の招待のみ再送可能です' };
+            Adapt.toast(m[e.message] || '再送失敗: ' + e.message, 'error');
+          }
+        });
+      });
+      el.querySelectorAll('[data-revoke]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('招待を取り消します。このURLは使用できなくなります。よろしいですか？')) return;
+          try {
+            await AdaptAPI.call(`/api/admin/partner-invitations/${btn.dataset.revoke}`, { method: 'DELETE' });
+            Adapt.toast('招待を取り消しました', 'success');
+            loadInvitations();
+          } catch (e) {
+            Adapt.toast('取消失敗: ' + e.message, 'error');
+          }
+        });
+      });
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  function openNewInviteModal() {
+    const wrap = document.getElementById('modalWrap');
+    wrap.style.display = '';
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="invBackdrop">
+        <div class="modal">
+          <h3>総代理店を招待</h3>
+          <p style="font-size:12px;color:#666;margin:0 0 12px 0;">
+            指定したメールアドレスに招待URLが送信されます。受信者はフォームに会社情報等を入力して登録を申請できます。
+          </p>
+          <div id="invMsg"></div>
+          <form id="invForm" class="stack" novalidate>
+            <div class="field">
+              <label for="invEmail">招待先メール <span class="req">*</span></label>
+              <input id="invEmail" type="email" maxlength="200" required />
+            </div>
+            <div class="field">
+              <label for="invPct">提示按分率（%・任意）</label>
+              <input id="invPct" type="number" step="0.1" min="0" max="100" placeholder="例: 30" />
+              <div class="hint">承認時に自動でこの値を設定します。未入力なら承認時に別途設定してください。</div>
+            </div>
+            <div class="field">
+              <label for="invMonths">初期契約期間（月数）</label>
+              <input id="invMonths" type="number" min="1" max="60" value="12" />
+            </div>
+            <div class="field">
+              <label for="invNote">メモ（任意・admin のみ見える）</label>
+              <textarea id="invNote" rows="2" maxlength="500"></textarea>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn" id="invCancel">キャンセル</button>
+              <button type="submit" class="btn btn--primary" id="invSubmit">招待を送信</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    const close = () => { wrap.innerHTML = ''; wrap.style.display = 'none'; };
+    document.getElementById('invBackdrop').addEventListener('click', e => {
+      if (e.target.id === 'invBackdrop') close();
+    });
+    document.getElementById('invCancel').addEventListener('click', close);
+    document.getElementById('invForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById('invMsg');
+      const btn = document.getElementById('invSubmit');
+      msgEl.innerHTML = '';
+      const payload = {
+        invited_email: document.getElementById('invEmail').value.trim(),
+        initial_revenue_share_pct: document.getElementById('invPct').value ? Number(document.getElementById('invPct').value) : null,
+        initial_contract_months: Number(document.getElementById('invMonths').value || 12),
+        note: document.getElementById('invNote').value.trim() || null
+      };
+      btn.disabled = true;
+      btn.textContent = '送信中…';
+      try {
+        const r = await AdaptAPI.call('/api/admin/partner-invitations', { method: 'POST', body: payload });
+        Adapt.toast('招待を送信しました', 'success');
+        close();
+        loadInvitations();
+        // URL をコピーしやすく表示
+        const urlEl = document.createElement('div');
+        urlEl.style.cssText = 'margin-top:10px;padding:8px;background:#fff8e1;border-radius:4px;font-size:11px;word-break:break-all;';
+        urlEl.innerHTML = `招待URL: <span class="mono">${Adapt.escapeHTML(r.register_url)}</span>`;
+        document.getElementById('invitationsContent').prepend(urlEl);
+        setTimeout(() => urlEl.remove(), 60000);
+      } catch (e) {
+        const m = { invalid_email: 'メールアドレスの形式が不正です', invalid_pct: '按分率が不正です', invalid_months: '契約月数が不正です（1〜60）' };
+        msgEl.innerHTML = `<div class="msg msg--err">${m[e.message] || 'エラー: ' + e.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = '招待を送信';
+      }
+    });
   }
 
   // =====================================================

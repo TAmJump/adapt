@@ -321,6 +321,80 @@ const nextSuperId = async (db) => {
 };
 
 // =========================================================
+//  Phase 4-3b ヘルパ
+// =========================================================
+
+// 国税庁法人番号API 連携
+// env.NTA_API_ID が未設定の場合は mock モードで動作（dev/test 用）
+async function verifyCorporateNumber(number, env) {
+  if (!/^\d{13}$/.test(number)) {
+    return { ok: false, error: 'invalid_format' };
+  }
+  const appId = env.NTA_API_ID;
+  if (!appId) {
+    // mock モード：13桁数字なら形式OK扱い（API未配備でも開発継続可能）
+    return {
+      ok: true,
+      mocked: true,
+      name: null,
+      name_kana: null,
+      prefecture: null,
+      city: null,
+      street: null,
+      status: null,
+      message: 'NTA_API_ID 未設定のため mock モードで動作しています（実データ未検証）'
+    };
+  }
+  try {
+    const url = `https://api.houjin-bangou.nta.go.jp/4/num?id=${encodeURIComponent(appId)}&number=${number}&type=12`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      return { ok: false, error: 'nta_api_error', status: resp.status };
+    }
+    const data = await resp.json();
+    if (!data || data.count === 0 || !Array.isArray(data.corporations) || data.corporations.length === 0) {
+      return { ok: false, error: 'not_found' };
+    }
+    const corp = data.corporations[0];
+    return {
+      ok: true,
+      mocked: false,
+      name: corp.name || null,
+      name_kana: corp.furigana || null,
+      prefecture: corp.prefectureName || null,
+      city: corp.cityName || null,
+      street: corp.streetNumber || null,
+      status: corp.kind || null,
+      raw: data
+    };
+  } catch (e) {
+    return { ok: false, error: 'network_error', message: String(e.message || e) };
+  }
+}
+
+// 法人番号 チェックデジット検証
+// 先頭1桁のチェックデジットが 9 - (下12桁の桁ごとの重み付き和 mod 9) の仕様
+function isValidCorporateNumber(num) {
+  if (!/^\d{13}$/.test(num)) return false;
+  const check = parseInt(num[0], 10);
+  const base = num.slice(1);
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const digit = parseInt(base[i], 10);
+    // 奇数位(右から1,3,5...)の重みは1, 偶数位は2（右からのインデックスが偶奇）
+    const weightOdd = ((11 - i) % 2) === 1;
+    sum += digit * (weightOdd ? 1 : 2);
+  }
+  const expected = 9 - (sum % 9);
+  return expected === check;
+}
+
+// 郵便番号・電話等の単純バリデーション
+const validatePostalCode = (s) => typeof s === 'string' && /^\d{7}$/.test(s);
+const validateJPPhone = (s) => typeof s === 'string' && /^\d{10,11}$/.test(s.replace(/[-\s()]/g, ''));
+const validateKana = (s) => typeof s === 'string' && s.length >= 1 && s.length <= 100 && /^[\u30A0-\u30FF\uFF65-\uFF9F（）()\-\s]+$/.test(s);
+
+// =========================================================
 //  Phase 4-3a 按分率履歴引き当てヘルパ
 //  target_date（YYYY-MM-DD）時点で有効な履歴レコードを1件取得
 //  scope='tamj_to_super' の場合 parent_partner_id は NULL
@@ -594,7 +668,8 @@ async function runCleanupExpiredTokens(db) {
     db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso),
     db.prepare("DELETE FROM partner_sessions WHERE expires_at < ?").bind(nowIso),
     db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(nowIso),
-    db.prepare("DELETE FROM partner_password_reset_tokens WHERE expires_at < ?").bind(nowIso)
+    db.prepare("DELETE FROM partner_password_reset_tokens WHERE expires_at < ?").bind(nowIso),
+    db.prepare("UPDATE partner_invitations SET status='expired' WHERE status='issued' AND expires_at < ?").bind(nowIso)
   ]);
   return {
     sso_tickets_deleted: results[0].meta?.changes || 0,
@@ -602,7 +677,8 @@ async function runCleanupExpiredTokens(db) {
     sessions_deleted: results[2].meta?.changes || 0,
     partner_sessions_deleted: results[3].meta?.changes || 0,
     password_reset_tokens_deleted: results[4].meta?.changes || 0,
-    partner_password_reset_tokens_deleted: results[5].meta?.changes || 0
+    partner_password_reset_tokens_deleted: results[5].meta?.changes || 0,
+    partner_invitations_expired: results[6].meta?.changes || 0
   };
 }
 
@@ -2303,6 +2379,561 @@ ${resetUrl}
           " ORDER BY p.type ASC, p.created_at DESC"
         ).all();
         return json({ ok: true, partners: rows.results || [] }, 200, cors);
+      }
+
+      // =============== Phase 4-3b: 代理店セルフ登録（招待フロー） ===============
+
+      // [admin] 招待作成（admin→super）
+      if (path === '/api/admin/partner-invitations' && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const b = (await request.json()) || {};
+        const { invited_email, initial_revenue_share_pct, initial_contract_months, note } = b;
+        if (!invited_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invited_email)) {
+          return json({ error: 'invalid_email' }, 400, cors);
+        }
+        const pct = initial_revenue_share_pct != null ? Number(initial_revenue_share_pct) : null;
+        if (pct != null && (Number.isNaN(pct) || pct < 0 || pct > 100)) {
+          return json({ error: 'invalid_pct' }, 400, cors);
+        }
+        const months = initial_contract_months != null ? Number(initial_contract_months) : 12;
+        if (!Number.isInteger(months) || months < 1 || months > 60) {
+          return json({ error: 'invalid_months' }, 400, cors);
+        }
+
+        const token = randomId(48);
+        const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+        await db.prepare(
+          "INSERT INTO partner_invitations " +
+          "(token, invited_email, invited_role, initial_revenue_share_pct, initial_contract_months, note, created_by_staff_id, status, expires_at) " +
+          "VALUES (?, ?, 'super', ?, ?, ?, ?, 'issued', ?)"
+        ).bind(token, invited_email, pct, months, note || null, r.user.staff_id, expiresAt).run();
+
+        const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
+        const registerUrl = `${baseUrl}/partner-register.html?token=${token}`;
+        try {
+          await sendEmail(env, {
+            to: invited_email,
+            subject: '【Adavoo】総代理店ご登録のご案内 / TAmJ.Corp',
+            text:
+`この度は Adavoo 総代理店契約にご関心をお寄せいただきありがとうございます。
+
+以下のURLから登録手続きへお進みください。
+
+${registerUrl}
+
+・有効期限: ${new Date(expiresAt).toLocaleString('ja-JP')}（14日間）
+・所要時間: 約10〜15分
+・ご用意いただくもの: 法人番号・代表者氏名・振込先口座情報
+
+ご不明な点はこのメールにご返信ください。
+
+--
+TAmJ.Corp
+https://tamjump.com/`
+          });
+        } catch {}
+
+        await audit(db, 'partner_invitation_created', r.user.staff_id, r.user.login_id, {
+          invited_email, invited_role: 'super', pct, months
+        }, request);
+
+        return json({ ok: true, token, expires_at: expiresAt, register_url: registerUrl }, 200, cors);
+      }
+
+      // [partner/super] 招待作成（super→agent）
+      if (path === '/api/partner/invitations' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        if (r.partner.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+        if (r.partner.status !== 'active') return json({ error: 'not_active' }, 400, cors);
+
+        const b = (await request.json()) || {};
+        const { invited_email, initial_revenue_share_pct, initial_contract_months, note } = b;
+        if (!invited_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invited_email)) {
+          return json({ error: 'invalid_email' }, 400, cors);
+        }
+        const pct = initial_revenue_share_pct != null ? Number(initial_revenue_share_pct) : null;
+        // agentへの按分率は自社取得率を超えられない（super_to_agent scope 前提）
+        if (pct != null) {
+          if (Number.isNaN(pct) || pct < 0 || pct > 100) return json({ error: 'invalid_pct' }, 400, cors);
+          if (r.partner.revenue_share_pct != null && pct > r.partner.revenue_share_pct) {
+            return json({ error: 'pct_exceeds_parent_share', parent_pct: r.partner.revenue_share_pct }, 400, cors);
+          }
+        }
+        const months = initial_contract_months != null ? Number(initial_contract_months) : 12;
+        if (!Number.isInteger(months) || months < 1 || months > 60) {
+          return json({ error: 'invalid_months' }, 400, cors);
+        }
+
+        const token = randomId(48);
+        const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+        await db.prepare(
+          "INSERT INTO partner_invitations " +
+          "(token, invited_email, invited_role, parent_partner_id, initial_revenue_share_pct, initial_contract_months, note, created_by_partner_id, status, expires_at) " +
+          "VALUES (?, ?, 'agent', ?, ?, ?, ?, ?, 'issued', ?)"
+        ).bind(token, invited_email, r.partner.partner_id, pct, months, note || null, r.partner.partner_id, expiresAt).run();
+
+        const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
+        const registerUrl = `${baseUrl}/partner-register.html?token=${token}`;
+        try {
+          await sendEmail(env, {
+            to: invited_email,
+            subject: `【Adavoo】代理店ご登録のご案内 / ${r.partner.company_name}`,
+            text:
+`この度は ${r.partner.company_name} 様経由で Adavoo 代理店契約にご関心をお寄せいただきありがとうございます。
+
+以下のURLから登録手続きへお進みください。
+
+${registerUrl}
+
+・招待元: ${r.partner.company_name}（${r.partner.code}）
+・有効期限: ${new Date(expiresAt).toLocaleString('ja-JP')}（14日間）
+・所要時間: 約10〜15分
+
+--
+TAmJ.Corp`
+          });
+        } catch {}
+
+        await audit(db, 'partner_invitation_created', null, r.partner.login_id, {
+          invited_email, invited_role: 'agent', parent_partner_id: r.partner.partner_id, pct, months
+        }, request);
+
+        return json({ ok: true, token, expires_at: expiresAt, register_url: registerUrl }, 200, cors);
+      }
+
+      // [admin] 招待一覧
+      if (path === '/api/admin/partner-invitations' && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const rows = await db.prepare(
+          "SELECT i.id, i.invited_email, i.invited_role, i.parent_partner_id, " +
+          "       i.initial_revenue_share_pct, i.initial_contract_months, i.note, " +
+          "       i.status, i.expires_at, i.used_at, i.resulted_partner_id, i.resend_count, " +
+          "       i.last_resent_at, i.created_at, " +
+          "       s.login_id AS created_by_staff_login, " +
+          "       p.company_name AS parent_company_name, " +
+          "       rp.company_name AS resulted_company_name " +
+          "  FROM partner_invitations i " +
+          "  LEFT JOIN master_staff s ON i.created_by_staff_id = s.staff_id " +
+          "  LEFT JOIN partners p ON i.parent_partner_id = p.partner_id " +
+          "  LEFT JOIN partners rp ON i.resulted_partner_id = rp.partner_id " +
+          " ORDER BY i.created_at DESC"
+        ).all();
+        return json({ ok: true, invitations: rows.results || [] }, 200, cors);
+      }
+
+      // [admin] 招待再送（5回まで）
+      const resendMatch = path.match(/^\/api\/admin\/partner-invitations\/(\d+)\/resend$/);
+      if (resendMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const id = parseInt(resendMatch[1], 10);
+
+        const inv = await db.prepare(
+          "SELECT * FROM partner_invitations WHERE id = ?"
+        ).bind(id).first();
+        if (!inv) return json({ error: 'invitation_not_found' }, 404, cors);
+        if (inv.status !== 'issued') return json({ error: 'invalid_status', current: inv.status }, 400, cors);
+        if ((inv.resend_count || 0) >= 5) return json({ error: 'resend_limit_reached' }, 400, cors);
+
+        const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
+        const registerUrl = `${baseUrl}/partner-register.html?token=${inv.token}`;
+        try {
+          await sendEmail(env, {
+            to: inv.invited_email,
+            subject: '【Adavoo・再送】ご登録のご案内',
+            text:
+`先日お送りしました登録のご案内を再送いたします。
+
+${registerUrl}
+
+・有効期限: ${new Date(inv.expires_at).toLocaleString('ja-JP')}
+
+--
+TAmJ.Corp`
+          });
+        } catch {}
+
+        await db.prepare(
+          "UPDATE partner_invitations SET resend_count = resend_count + 1, last_resent_at = datetime('now') WHERE id = ?"
+        ).bind(id).run();
+
+        await audit(db, 'partner_invitation_resent', r.user.staff_id, r.user.login_id, { invitation_id: id }, request);
+        return json({ ok: true, resend_count: (inv.resend_count || 0) + 1 }, 200, cors);
+      }
+
+      // [admin] 招待失効
+      const revokeMatch = path.match(/^\/api\/admin\/partner-invitations\/(\d+)$/);
+      if (revokeMatch && method === 'DELETE') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const id = parseInt(revokeMatch[1], 10);
+
+        const inv = await db.prepare("SELECT status FROM partner_invitations WHERE id = ?").bind(id).first();
+        if (!inv) return json({ error: 'invitation_not_found' }, 404, cors);
+        if (inv.status !== 'issued') return json({ error: 'invalid_status', current: inv.status }, 400, cors);
+
+        await db.prepare(
+          "UPDATE partner_invitations SET status = 'revoked' WHERE id = ?"
+        ).bind(id).run();
+
+        await audit(db, 'partner_invitation_revoked', r.user.staff_id, r.user.login_id, { invitation_id: id }, request);
+        return json({ ok: true }, 200, cors);
+      }
+
+      // [public] 招待情報取得（トークンで照会・登録フォーム冒頭）
+      if (path === '/api/partner-invitations/info' && method === 'GET') {
+        const token = url.searchParams.get('token');
+        if (!token) return json({ error: 'missing_token' }, 400, cors);
+
+        const inv = await db.prepare(
+          "SELECT i.token, i.invited_email, i.invited_role, i.parent_partner_id, i.initial_contract_months, " +
+          "       i.status, i.expires_at, p.company_name AS parent_company_name " +
+          "  FROM partner_invitations i " +
+          "  LEFT JOIN partners p ON i.parent_partner_id = p.partner_id " +
+          " WHERE i.token = ?"
+        ).bind(token).first();
+        if (!inv) return json({ error: 'invalid_token' }, 404, cors);
+
+        if (inv.status === 'accepted') return json({ error: 'already_accepted' }, 409, cors);
+        if (inv.status === 'revoked') return json({ error: 'revoked' }, 410, cors);
+        if (inv.status === 'expired' || new Date(inv.expires_at) < new Date()) {
+          // 自動で expired に遷移（Cron と同等処理）
+          if (inv.status === 'issued') {
+            await db.prepare("UPDATE partner_invitations SET status = 'expired' WHERE token = ?").bind(token).run();
+          }
+          return json({ error: 'expired', expires_at: inv.expires_at }, 410, cors);
+        }
+
+        return json({
+          ok: true,
+          invitation: {
+            invited_email: inv.invited_email,
+            invited_role: inv.invited_role,
+            parent_partner_id: inv.parent_partner_id,
+            parent_company_name: inv.parent_company_name,
+            initial_contract_months: inv.initial_contract_months,
+            expires_at: inv.expires_at
+          }
+        }, 200, cors);
+      }
+
+      // [public] 法人番号 国税庁API 照会
+      if (path === '/api/partner-invitations/verify-corporate-number' && method === 'POST') {
+        const b = (await request.json()) || {};
+        const { token, corporate_number } = b;
+        if (!token) return json({ error: 'missing_token' }, 400, cors);
+        if (!corporate_number) return json({ error: 'missing_corporate_number' }, 400, cors);
+
+        // トークン最小検証（DoS対策）
+        const inv = await db.prepare(
+          "SELECT status, expires_at FROM partner_invitations WHERE token = ?"
+        ).bind(token).first();
+        if (!inv) return json({ error: 'invalid_token' }, 404, cors);
+        if (inv.status !== 'issued') return json({ error: 'invalid_status', current: inv.status }, 400, cors);
+        if (new Date(inv.expires_at) < new Date()) return json({ error: 'expired' }, 410, cors);
+
+        // チェックデジット検証
+        if (!isValidCorporateNumber(corporate_number)) {
+          return json({ ok: false, error: 'invalid_check_digit' }, 400, cors);
+        }
+
+        const result = await verifyCorporateNumber(corporate_number, env);
+        return json(result, result.ok ? 200 : 400, cors);
+      }
+
+      // [public] 登録完了（全情報 POST → partners に pending で INSERT）
+      if (path === '/api/partner-invitations/accept' && method === 'POST') {
+        const b = (await request.json()) || {};
+        const {
+          token, corporate_number,
+          company_name, company_name_kana,
+          representative_name, representative_name_kana,
+          hq_postal_code, hq_prefecture, hq_city, hq_street, hq_phone,
+          industry_code, founded_on, capital,
+          contact_name, contact_name_kana, contact_email, contact_phone,
+          bank_info,
+          login_id, password,
+          consents // { terms, antisocial, privacy, agreement } 全て true 必須
+        } = b;
+
+        if (!token) return json({ error: 'missing_token' }, 400, cors);
+
+        // トークン検証
+        const inv = await db.prepare(
+          "SELECT * FROM partner_invitations WHERE token = ?"
+        ).bind(token).first();
+        if (!inv) return json({ error: 'invalid_token' }, 404, cors);
+        if (inv.status !== 'issued') return json({ error: 'invalid_status', current: inv.status }, 400, cors);
+        if (new Date(inv.expires_at) < new Date()) return json({ error: 'expired' }, 410, cors);
+
+        // 必須チェック
+        const missing = [];
+        const req = {
+          company_name, company_name_kana,
+          representative_name, representative_name_kana,
+          hq_postal_code, hq_prefecture, hq_city, hq_street, hq_phone,
+          industry_code, founded_on, capital,
+          contact_name, contact_name_kana, contact_email, contact_phone,
+          bank_info, login_id, password, corporate_number
+        };
+        for (const [k, v] of Object.entries(req)) {
+          if (v === undefined || v === null || v === '') missing.push(k);
+        }
+        if (missing.length > 0) return json({ error: 'missing_fields', fields: missing }, 400, cors);
+
+        // 各種バリデーション
+        if (!isValidCorporateNumber(corporate_number)) return json({ error: 'invalid_corporate_number' }, 400, cors);
+        if (typeof company_name !== 'string' || company_name.length < 1 || company_name.length > 100) return json({ error: 'invalid_company_name' }, 400, cors);
+        if (!validateKana(company_name_kana)) return json({ error: 'invalid_company_name_kana' }, 400, cors);
+        if (!validateKana(representative_name_kana)) return json({ error: 'invalid_representative_name_kana' }, 400, cors);
+        if (!validatePostalCode(hq_postal_code)) return json({ error: 'invalid_postal_code' }, 400, cors);
+        if (!validateJPPhone(hq_phone)) return json({ error: 'invalid_hq_phone' }, 400, cors);
+        if (!validateJPPhone(contact_phone)) return json({ error: 'invalid_contact_phone' }, 400, cors);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact_email)) return json({ error: 'invalid_contact_email' }, 400, cors);
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(founded_on)) return json({ error: 'invalid_founded_on' }, 400, cors);
+        const cap = Number(capital);
+        if (!Number.isInteger(cap) || cap < 1 || cap > 10_000_000_000) return json({ error: 'invalid_capital' }, 400, cors);
+        if (!/^[A-Za-z0-9_-]{3,40}$/.test(login_id)) return json({ error: 'invalid_login_id' }, 400, cors);
+        if (typeof password !== 'string' || password.length < 8) return json({ error: 'password_too_short' }, 400, cors);
+
+        // 銀行情報
+        if (typeof bank_info !== 'object' || !bank_info) return json({ error: 'invalid_bank_info' }, 400, cors);
+        const bi = bank_info;
+        if (!bi.bank_name || !bi.branch_name || !bi.account_type || !bi.account_number || !bi.account_holder) {
+          return json({ error: 'invalid_bank_info', missing: ['bank_name','branch_name','account_type','account_number','account_holder'].filter(k => !bi[k]) }, 400, cors);
+        }
+        if (!['普通','当座','貯蓄','ordinary','checking'].includes(bi.account_type)) return json({ error: 'invalid_account_type' }, 400, cors);
+        if (!/^\d{4,10}$/.test(bi.account_number)) return json({ error: 'invalid_account_number' }, 400, cors);
+
+        // 同意
+        if (!consents || !consents.terms || !consents.antisocial || !consents.privacy || !consents.agreement) {
+          return json({ error: 'consent_required' }, 400, cors);
+        }
+
+        // ログインID重複チェック
+        const dup = await db.prepare("SELECT partner_id FROM partners WHERE login_id = ?").bind(login_id).first();
+        if (dup) return json({ error: 'login_id_taken' }, 409, cors);
+
+        // 法人番号の再確認（国税庁API・mock でも可）
+        const ntaResult = await verifyCorporateNumber(corporate_number, env);
+        if (!ntaResult.ok && ntaResult.error !== 'api_not_configured') {
+          return json({ error: 'nta_verification_failed', detail: ntaResult.error }, 400, cors);
+        }
+
+        // partner_id 生成
+        let partnerId;
+        if (inv.invited_role === 'super') {
+          partnerId = await nextSuperId(db);
+        } else {
+          // AGT-XXXXXX
+          const row = await db.prepare(
+            "SELECT partner_id FROM partners WHERE type='agent' AND partner_id LIKE 'AGT-%' ORDER BY partner_id DESC LIMIT 1"
+          ).first();
+          const n = row ? parseInt(row.partner_id.replace('AGT-', ''), 10) + 1 : 1;
+          partnerId = 'AGT-' + String(n).padStart(6, '0');
+        }
+        // コード生成（admin 登録と同じロジック）
+        const codePrefix = inv.invited_role === 'super' ? 'SUP' : 'AGT';
+        const codeSuffix = randomId(6).toUpperCase();
+        const code = `${codePrefix}-${codeSuffix}`;
+
+        // パスワードハッシュ
+        const pwHash = await sha256(password);
+
+        // 契約期間
+        const nowIso = nowISO();
+        const contractEnd = new Date(Date.now() + (inv.initial_contract_months || 12) * 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        // 振込先JSON正規化
+        const cleanedBank = {
+          bank_name: bi.bank_name,
+          bank_code: bi.bank_code || null,
+          branch_name: bi.branch_name,
+          branch_code: bi.branch_code || null,
+          account_type: bi.account_type,
+          account_number: bi.account_number,
+          account_holder: bi.account_holder,
+          memo: bi.memo || null
+        };
+
+        // INSERT
+        await db.prepare(
+          "INSERT INTO partners " +
+          "(partner_id, type, parent_partner_id, company_name, company_name_kana, corporate_number, " +
+          " representative_name, representative_name_kana, " +
+          " hq_postal_code, hq_prefecture, hq_city, hq_street, hq_phone, " +
+          " industry_code, founded_on, capital, " +
+          " contact_name, contact_name_kana, contact_email, contact_phone, " +
+          " bank_info_json, corporate_number_verified_at, corporate_number_api_result, " +
+          " code, login_id, password_hash, email, phone, " +
+          " contract_start_at, contract_end_at, revenue_share_pct, status, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))"
+        ).bind(
+          partnerId,
+          inv.invited_role,
+          inv.parent_partner_id || null,
+          company_name,
+          company_name_kana,
+          corporate_number,
+          representative_name,
+          representative_name_kana,
+          hq_postal_code,
+          hq_prefecture,
+          hq_city,
+          hq_street,
+          hq_phone,
+          industry_code,
+          founded_on,
+          cap,
+          contact_name,
+          contact_name_kana,
+          contact_email,
+          contact_phone,
+          JSON.stringify(cleanedBank),
+          ntaResult.ok ? nowIso : null,
+          ntaResult.ok ? JSON.stringify(ntaResult) : null,
+          code,
+          login_id,
+          pwHash,
+          contact_email,
+          contact_phone,
+          nowIso,
+          contractEnd,
+          inv.initial_revenue_share_pct
+        ).run();
+
+        // 招待を accepted に遷移
+        await db.prepare(
+          "UPDATE partner_invitations SET status='accepted', used_at=datetime('now'), resulted_partner_id=? WHERE id=?"
+        ).bind(partnerId, inv.id).run();
+
+        // 同意記録を保存（4種）
+        const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || null;
+        const ua = request.headers.get('user-agent') || null;
+        for (const [dt, v] of Object.entries({
+          terms: 'v1.0',
+          antisocial: 'v1.0',
+          privacy: 'v1.0',
+          agreement: 'v1.0'
+        })) {
+          await db.prepare(
+            "INSERT INTO consent_records (partner_id, invitation_token, document_type, document_version, ip_address, user_agent) " +
+            "VALUES (?, ?, ?, ?, ?, ?)"
+          ).bind(partnerId, token, dt, v, ip, ua).run();
+        }
+
+        await audit(db, 'partner_self_registered', null, login_id, {
+          partner_id: partnerId,
+          invitation_id: inv.id,
+          invited_role: inv.invited_role,
+          parent_partner_id: inv.parent_partner_id
+        }, request);
+
+        // 承認依頼通知（admin または親 super に）
+        try {
+          if (inv.invited_role === 'super') {
+            // タムジ社（ADMIN_NOTIFY_EMAIL）に通知
+            const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
+            await sendEmail(env, {
+              to: adminEmail,
+              subject: `【Adavoo】総代理店の新規登録申請: ${company_name}`,
+              text:
+`総代理店の新規登録申請が届きました。
+
+会社名: ${company_name}
+法人番号: ${corporate_number}
+代表者: ${representative_name}
+担当者: ${contact_name} <${contact_email}>
+partner_id: ${partnerId}
+
+管理画面で承認/却下の処理をお願いします。
+${(env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '')}/admin-dashboard.html`
+            });
+          } else if (inv.parent_partner_id) {
+            // 親 super に通知
+            const parent = await db.prepare(
+              "SELECT email, company_name FROM partners WHERE partner_id = ?"
+            ).bind(inv.parent_partner_id).first();
+            if (parent?.email) {
+              await sendEmail(env, {
+                to: parent.email,
+                subject: `【Adavoo】代理店の新規登録申請: ${company_name}`,
+                text:
+`${parent.company_name} 様
+
+貴社経由の代理店登録申請が届きました。
+
+会社名: ${company_name}
+法人番号: ${corporate_number}
+担当者: ${contact_name} <${contact_email}>
+
+タムジ社による承認をお待ちください。
+
+--
+TAmJ.Corp`
+              });
+            }
+          }
+        } catch {}
+
+        return json({
+          ok: true,
+          partner_id: partnerId,
+          status: 'pending',
+          message: 'ご登録ありがとうございました。弊社にて内容確認の上、3営業日以内に ' + contact_email + ' 宛に承認可否をご連絡します。'
+        }, 200, cors);
+      }
+
+      // [admin] 却下（既存 /approve エンドポイントで承認は代替可能だが、却下は新規）
+      const rejectPendingMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/reject$/);
+      if (rejectPendingMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = rejectPendingMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, status, contact_email, company_name FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (p.status !== 'pending') return json({ error: 'not_pending', current: p.status }, 400, cors);
+
+        const b = (await request.json().catch(() => ({}))) || {};
+        const reason = (b.reason || '').toString().slice(0, 500);
+
+        await db.prepare(
+          "UPDATE partners SET status='rejected', rejected_at=datetime('now'), rejection_reason=?, updated_at=datetime('now') WHERE partner_id=?"
+        ).bind(reason || null, partnerId).run();
+
+        await audit(db, 'admin_partner_rejected', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId, reason: reason || null
+        }, request);
+
+        try {
+          if (p.contact_email) {
+            await sendEmail(env, {
+              to: p.contact_email,
+              subject: `【Adavoo】ご登録申請について / ${p.company_name}`,
+              text:
+`${p.company_name} 様
+
+ご登録申請につきまして、誠に申し訳ございませんが今回はご見送りとさせていただきます。
+${reason ? '\n理由:\n' + reason + '\n' : ''}
+ご不明な点はタムジ社（info@tamjump.com）までお問合せください。
+
+--
+TAmJ.Corp`
+            });
+          }
+        } catch {}
+
+        return json({ ok: true, partner_id: partnerId }, 200, cors);
       }
 
       // 総代理店を新規登録（status='pending' で登録、後で承認）

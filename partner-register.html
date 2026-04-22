@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>代理店新規登録｜Adavoo</title>
+<link rel="stylesheet" href="assets/style.css?v=20260421" />
+<style>
+  .register-wrap { max-width: 720px; margin: 40px auto; padding: 0 20px; }
+  .progress { display: flex; gap: 4px; margin: 16px 0 24px 0; }
+  .progress-step {
+    flex: 1; height: 6px; border-radius: 3px; background: #e3e3e0;
+  }
+  .progress-step.active { background: #c4432b; }
+  .progress-step.done { background: #15803d; }
+  .step-title { font-size: 13px; color: #666; margin: 0 0 4px 0; letter-spacing: 0.04em; }
+  .step-card { background: #fff; border: 1px solid #e3e3e0; border-radius: 8px; padding: 24px 28px; margin-bottom: 16px; }
+  .step-card h2 { margin: 0 0 12px 0; font-size: 18px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .two-col { grid-template-columns: 1fr; } }
+  .nav-actions { display: flex; gap: 8px; justify-content: space-between; margin-top: 20px; }
+  .nta-result {
+    margin-top: 8px; padding: 8px 10px; background: #f9fafb;
+    border-left: 3px solid #15803d; border-radius: 3px; font-size: 12px;
+  }
+  .nta-result.err { border-left-color: #b91c1c; color: #991b1b; background: #fef2f2; }
+  .consent-list { list-style: none; padding: 0; margin: 0; }
+  .consent-list li { margin-bottom: 8px; font-size: 13px; }
+  .consent-list label { cursor: pointer; }
+  .read-more { color: #c4432b; text-decoration: underline; margin-left: 8px; font-size: 11px; }
+  .invitation-info {
+    background: #fff8e1; border: 1px solid #f7c85c; border-radius: 6px;
+    padding: 12px 14px; margin-bottom: 16px; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<main class="register-wrap">
+  <section class="page-intro">
+    <p class="section-label">Adavoo Partner Registration</p>
+    <h1>代理店 新規登録</h1>
+  </section>
+
+  <div id="progressBar" class="progress"></div>
+  <p id="stepTitle" class="step-title"></p>
+
+  <div id="formArea"><p class="muted">読み込み中…</p></div>
+</main>
+
+<script src="assets/common.js?v=20260421"></script>
+<script>
+(async function () {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+  if (!token) {
+    document.getElementById('formArea').innerHTML =
+      `<div class="msg msg--err">招待トークンが見つかりません。メール記載のURLからアクセスしてください。</div>`;
+    return;
+  }
+
+  const state = {
+    currentStep: 1,
+    totalSteps: 5,
+    invitation: null,
+    data: {
+      corporate_number: '',
+      company_name: '',
+      company_name_kana: '',
+      representative_name: '',
+      representative_name_kana: '',
+      industry_code: '',
+      founded_on: '',
+      capital: '',
+      hq_postal_code: '',
+      hq_prefecture: '',
+      hq_city: '',
+      hq_street: '',
+      hq_phone: '',
+      contact_name: '',
+      contact_name_kana: '',
+      contact_email: '',
+      contact_phone: '',
+      bank_info: {
+        bank_name: '', branch_name: '', account_type: '', account_number: '', account_holder: '', memo: ''
+      },
+      login_id: '',
+      password: '',
+      password2: '',
+      consents: { terms: false, antisocial: false, privacy: false, agreement: false }
+    }
+  };
+
+  // 招待情報取得
+  try {
+    const API_BASE = window.ADAPT_CONFIG?.API_BASE || '';
+    const res = await fetch(API_BASE + '/api/partner-invitations/info?token=' + encodeURIComponent(token));
+    const data = await res.json();
+    if (!res.ok) {
+      const map = {
+        invalid_token: '招待トークンが無効です。',
+        already_accepted: 'この招待は既に使用済みです。別の招待URLをご確認ください。',
+        revoked: 'この招待は取り消されました。',
+        expired: '招待の有効期限が切れています。招待元にお問合せください。'
+      };
+      document.getElementById('formArea').innerHTML =
+        `<div class="msg msg--err">${map[data.error] || 'エラー: ' + data.error}</div>`;
+      return;
+    }
+    state.invitation = data.invitation;
+    state.data.contact_email = state.invitation.invited_email;
+  } catch (e) {
+    document.getElementById('formArea').innerHTML =
+      `<div class="msg msg--err">招待情報の取得に失敗しました: ${e.message}</div>`;
+    return;
+  }
+
+  renderProgress();
+  renderStep();
+
+  function renderProgress() {
+    const el = document.getElementById('progressBar');
+    let html = '';
+    for (let i = 1; i <= state.totalSteps; i++) {
+      const cls = i < state.currentStep ? 'done' : (i === state.currentStep ? 'active' : '');
+      html += `<div class="progress-step ${cls}"></div>`;
+    }
+    el.innerHTML = html;
+    document.getElementById('stepTitle').textContent = `Step ${state.currentStep} / ${state.totalSteps}`;
+  }
+
+  function renderStep() {
+    renderProgress();
+    const area = document.getElementById('formArea');
+    const d = state.data;
+    const inv = state.invitation;
+    const roleLabel = inv.invited_role === 'super' ? '総代理店' : '代理店';
+
+    if (state.currentStep === 1) {
+      area.innerHTML = `
+        <div class="step-card">
+          <h2>1. 招待の確認</h2>
+          <div class="invitation-info">
+            <strong>登録種別:</strong> ${roleLabel}<br>
+            ${inv.parent_company_name ? `<strong>招待元:</strong> ${escapeHtml(inv.parent_company_name)}<br>` : '<strong>招待元:</strong> タムジ社<br>'}
+            <strong>招待先メール:</strong> ${escapeHtml(inv.invited_email)}<br>
+            <strong>初期契約期間:</strong> ${inv.initial_contract_months}ヶ月<br>
+            <strong>有効期限:</strong> ${new Date(inv.expires_at).toLocaleString('ja-JP')}
+          </div>
+          <p style="font-size:13px;color:#444;">
+            このURLは他の方と共有しないでください。<br>
+            所要時間は約10〜15分です。ご用意いただくもの：
+          </p>
+          <ul style="font-size:13px;color:#444;">
+            <li>法人番号（13桁・国税庁法人番号公表サイトで調べられます）</li>
+            <li>代表者名</li>
+            <li>振込先口座情報</li>
+            <li>担当者の連絡先</li>
+          </ul>
+          <div class="nav-actions">
+            <div></div>
+            <button class="btn btn--primary" id="nextBtn" type="button">登録を開始する</button>
+          </div>
+        </div>`;
+      document.getElementById('nextBtn').addEventListener('click', () => goTo(2));
+      return;
+    }
+
+    if (state.currentStep === 2) {
+      area.innerHTML = `
+        <div class="step-card">
+          <h2>2. 会社基本情報</h2>
+          <div id="msg2"></div>
+          <div class="field">
+            <label>法人番号 <span class="req">*</span></label>
+            <div style="display:flex;gap:8px;">
+              <input id="fCorpNum" type="text" inputmode="numeric" maxlength="13" placeholder="13桁の数字" value="${escapeAttr(d.corporate_number)}" style="flex:1;" />
+              <button class="btn btn--sm" id="verifyCorpBtn" type="button">国税庁データで確認</button>
+            </div>
+            <div id="ntaResult"></div>
+          </div>
+          <div class="field">
+            <label>会社名（正式名称） <span class="req">*</span></label>
+            <input id="fCoName" type="text" maxlength="100" value="${escapeAttr(d.company_name)}" />
+          </div>
+          <div class="field">
+            <label>会社名カナ <span class="req">*</span></label>
+            <input id="fCoNameKana" type="text" maxlength="100" value="${escapeAttr(d.company_name_kana)}" placeholder="カブシキガイシャ○○" />
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label>代表者名 <span class="req">*</span></label>
+              <input id="fRepName" type="text" maxlength="50" value="${escapeAttr(d.representative_name)}" />
+            </div>
+            <div class="field">
+              <label>代表者名カナ <span class="req">*</span></label>
+              <input id="fRepNameKana" type="text" maxlength="100" value="${escapeAttr(d.representative_name_kana)}" />
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label>業種 <span class="req">*</span></label>
+              <select id="fIndustry">
+                <option value="">選択してください</option>
+                ${industryOptions(d.industry_code)}
+              </select>
+            </div>
+            <div class="field">
+              <label>設立年月 <span class="req">*</span></label>
+              <input id="fFounded" type="month" value="${escapeAttr(d.founded_on)}" min="1900-01" />
+            </div>
+          </div>
+          <div class="field">
+            <label>資本金（円） <span class="req">*</span></label>
+            <input id="fCapital" type="number" min="1" max="10000000000" value="${escapeAttr(d.capital)}" />
+          </div>
+          <div class="field">
+            <label>本社郵便番号（ハイフンなし7桁） <span class="req">*</span></label>
+            <input id="fPostal" type="text" inputmode="numeric" maxlength="7" value="${escapeAttr(d.hq_postal_code)}" />
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label>都道府県 <span class="req">*</span></label>
+              <input id="fPref" type="text" maxlength="20" value="${escapeAttr(d.hq_prefecture)}" />
+            </div>
+            <div class="field">
+              <label>市区町村 <span class="req">*</span></label>
+              <input id="fCity" type="text" maxlength="80" value="${escapeAttr(d.hq_city)}" />
+            </div>
+          </div>
+          <div class="field">
+            <label>番地・建物名 <span class="req">*</span></label>
+            <input id="fStreet" type="text" maxlength="120" value="${escapeAttr(d.hq_street)}" />
+          </div>
+          <div class="field">
+            <label>本社電話（ハイフンなし10〜11桁） <span class="req">*</span></label>
+            <input id="fHqPhone" type="tel" maxlength="15" value="${escapeAttr(d.hq_phone)}" />
+          </div>
+          <div class="nav-actions">
+            <button class="btn" id="backBtn" type="button">戻る</button>
+            <button class="btn btn--primary" id="nextBtn" type="button">次へ</button>
+          </div>
+        </div>`;
+      document.getElementById('backBtn').addEventListener('click', () => goTo(1));
+      document.getElementById('nextBtn').addEventListener('click', () => saveStep2());
+      document.getElementById('verifyCorpBtn').addEventListener('click', verifyCorporateNumber);
+      return;
+    }
+
+    if (state.currentStep === 3) {
+      area.innerHTML = `
+        <div class="step-card">
+          <h2>3. 担当者情報</h2>
+          <p style="font-size:12px;color:#666;">弊社からの連絡はこちらの情報に送信されます。</p>
+          <div id="msg3"></div>
+          <div class="two-col">
+            <div class="field">
+              <label>担当者名 <span class="req">*</span></label>
+              <input id="fContactName" type="text" maxlength="50" value="${escapeAttr(d.contact_name)}" />
+            </div>
+            <div class="field">
+              <label>担当者名カナ <span class="req">*</span></label>
+              <input id="fContactNameKana" type="text" maxlength="100" value="${escapeAttr(d.contact_name_kana)}" />
+            </div>
+          </div>
+          <div class="field">
+            <label>担当者メール <span class="req">*</span></label>
+            <input id="fContactEmail" type="email" maxlength="200" value="${escapeAttr(d.contact_email)}" />
+            <div class="hint">招待時のメールアドレス（${escapeHtml(inv.invited_email)}）と異なる場合、警告が表示されます。</div>
+          </div>
+          <div class="field">
+            <label>担当者直通電話（ハイフンなし10〜11桁） <span class="req">*</span></label>
+            <input id="fContactPhone" type="tel" maxlength="15" value="${escapeAttr(d.contact_phone)}" />
+          </div>
+          <div class="nav-actions">
+            <button class="btn" id="backBtn" type="button">戻る</button>
+            <button class="btn btn--primary" id="nextBtn" type="button">次へ</button>
+          </div>
+        </div>`;
+      document.getElementById('backBtn').addEventListener('click', () => goTo(2));
+      document.getElementById('nextBtn').addEventListener('click', () => saveStep3());
+      return;
+    }
+
+    if (state.currentStep === 4) {
+      const bi = d.bank_info;
+      area.innerHTML = `
+        <div class="step-card">
+          <h2>4. 振込先情報</h2>
+          <p style="font-size:12px;color:#666;">${roleLabel === '総代理店' ? '月次の按分支払いはこの口座へお振込みいたします。' : '情報は招待元の総代理店が参照します。'}</p>
+          <div id="msg4"></div>
+          <div class="two-col">
+            <div class="field">
+              <label>金融機関名 <span class="req">*</span></label>
+              <input id="fBankName" type="text" maxlength="100" value="${escapeAttr(bi.bank_name)}" />
+            </div>
+            <div class="field">
+              <label>支店名 <span class="req">*</span></label>
+              <input id="fBranchName" type="text" maxlength="100" value="${escapeAttr(bi.branch_name)}" />
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label>口座種別 <span class="req">*</span></label>
+              <select id="fAcctType">
+                <option value="">選択</option>
+                <option value="普通"${bi.account_type==='普通'?' selected':''}>普通</option>
+                <option value="当座"${bi.account_type==='当座'?' selected':''}>当座</option>
+                <option value="貯蓄"${bi.account_type==='貯蓄'?' selected':''}>貯蓄</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>口座番号（数字4〜10桁） <span class="req">*</span></label>
+              <input id="fAcctNum" type="text" inputmode="numeric" maxlength="10" value="${escapeAttr(bi.account_number)}" />
+            </div>
+          </div>
+          <div class="field">
+            <label>口座名義（カナ） <span class="req">*</span></label>
+            <input id="fAcctHolder" type="text" maxlength="100" value="${escapeAttr(bi.account_holder)}" placeholder="カ）タムジタロウ" />
+          </div>
+          <div class="field">
+            <label>メモ（任意）</label>
+            <input id="fBankMemo" type="text" maxlength="200" value="${escapeAttr(bi.memo)}" />
+          </div>
+          <div class="nav-actions">
+            <button class="btn" id="backBtn" type="button">戻る</button>
+            <button class="btn btn--primary" id="nextBtn" type="button">次へ</button>
+          </div>
+        </div>`;
+      document.getElementById('backBtn').addEventListener('click', () => goTo(3));
+      document.getElementById('nextBtn').addEventListener('click', () => saveStep4());
+      return;
+    }
+
+    if (state.currentStep === 5) {
+      const cs = d.consents;
+      area.innerHTML = `
+        <div class="step-card">
+          <h2>5. ログイン情報と同意</h2>
+          <div id="msg5"></div>
+          <div class="field">
+            <label>ログインID <span class="req">*</span></label>
+            <input id="fLoginId" type="text" maxlength="40" value="${escapeAttr(d.login_id)}" autocomplete="username" />
+            <div class="hint">半角英数字・ハイフン・アンダースコア、3〜40文字</div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label>パスワード <span class="req">*</span></label>
+              <input id="fPw" type="password" minlength="8" autocomplete="new-password" />
+              <div class="hint">8文字以上</div>
+            </div>
+            <div class="field">
+              <label>パスワード（確認） <span class="req">*</span></label>
+              <input id="fPw2" type="password" minlength="8" autocomplete="new-password" />
+            </div>
+          </div>
+          <h3 style="margin:20px 0 8px 0;font-size:14px;">各種同意事項</h3>
+          <ul class="consent-list">
+            <li><label><input type="checkbox" id="cTerms"${cs.terms?' checked':''}> 利用規約 に同意する <a class="read-more" href="terms.html#terms" target="_blank" rel="noopener">確認</a></label></li>
+            <li><label><input type="checkbox" id="cAnti"${cs.antisocial?' checked':''}> 反社会的勢力の排除に関する条項 に同意する <a class="read-more" href="terms.html#antisocial" target="_blank" rel="noopener">確認</a></label></li>
+            <li><label><input type="checkbox" id="cPriv"${cs.privacy?' checked':''}> 個人情報保護方針 に同意する <a class="read-more" href="terms.html#privacy" target="_blank" rel="noopener">確認</a></label></li>
+            <li><label><input type="checkbox" id="cAgr"${cs.agreement?' checked':''}> 代理店契約書 に同意する <a class="read-more" href="terms.html#agreement" target="_blank" rel="noopener">確認</a></label></li>
+          </ul>
+          <div class="nav-actions">
+            <button class="btn" id="backBtn" type="button">戻る</button>
+            <button class="btn btn--primary" id="submitBtn" type="button">登録を申込む</button>
+          </div>
+        </div>`;
+      document.getElementById('backBtn').addEventListener('click', () => goTo(4));
+      document.getElementById('submitBtn').addEventListener('click', () => submitAll());
+      return;
+    }
+
+    // 完了画面
+    if (state.currentStep === 99) {
+      area.innerHTML = `
+        <div class="step-card">
+          <h2>登録ありがとうございました</h2>
+          <p style="font-size:14px;">
+            ご登録いただいた情報を弊社にて確認の上、3営業日以内に
+            <strong>${escapeHtml(state.data.contact_email)}</strong> 宛に承認可否のご連絡を差し上げます。
+          </p>
+          <p style="font-size:12px;color:#666;margin-top:20px;">
+            このウィンドウは閉じていただいて構いません。
+          </p>
+        </div>`;
+    }
+  }
+
+  function goTo(step) {
+    state.currentStep = step;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    renderStep();
+  }
+
+  async function verifyCorporateNumber() {
+    const n = document.getElementById('fCorpNum').value.trim();
+    const resEl = document.getElementById('ntaResult');
+    if (!/^\d{13}$/.test(n)) {
+      resEl.innerHTML = `<div class="nta-result err">13桁の数字で入力してください</div>`;
+      return;
+    }
+    resEl.innerHTML = `<div class="nta-result">照会中…</div>`;
+    try {
+      const API_BASE = window.ADAPT_CONFIG?.API_BASE || '';
+      const res = await fetch(API_BASE + '/api/partner-invitations/verify-corporate-number', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, corporate_number: n })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        const map = {
+          invalid_format: '形式が不正です',
+          invalid_check_digit: 'チェックデジットが不正です（13桁を見直してください）',
+          not_found: '国税庁データに該当の法人番号が見つかりませんでした',
+          nta_api_error: '国税庁APIでエラーが発生しました',
+          network_error: 'ネットワークエラー'
+        };
+        resEl.innerHTML = `<div class="nta-result err">${map[data.error] || data.error}</div>`;
+        return;
+      }
+      if (data.mocked) {
+        resEl.innerHTML = `<div class="nta-result">✓ 形式OK（※国税庁API未配備のため、実データ未検証）</div>`;
+      } else {
+        resEl.innerHTML = `<div class="nta-result">✓ 国税庁データで確認しました：${escapeHtml(data.name || '')}</div>`;
+        // 会社名が空なら自動入力
+        if (data.name && !document.getElementById('fCoName').value) {
+          document.getElementById('fCoName').value = data.name;
+        }
+        if (data.name_kana && !document.getElementById('fCoNameKana').value) {
+          document.getElementById('fCoNameKana').value = data.name_kana;
+        }
+        if (data.prefecture && !document.getElementById('fPref').value) {
+          document.getElementById('fPref').value = data.prefecture;
+        }
+        if (data.city && !document.getElementById('fCity').value) {
+          document.getElementById('fCity').value = data.city;
+        }
+      }
+    } catch (e) {
+      resEl.innerHTML = `<div class="nta-result err">エラー: ${e.message}</div>`;
+    }
+  }
+
+  function saveStep2() {
+    const d = state.data;
+    const msg = document.getElementById('msg2');
+    msg.innerHTML = '';
+    d.corporate_number = document.getElementById('fCorpNum').value.trim();
+    d.company_name = document.getElementById('fCoName').value.trim();
+    d.company_name_kana = document.getElementById('fCoNameKana').value.trim();
+    d.representative_name = document.getElementById('fRepName').value.trim();
+    d.representative_name_kana = document.getElementById('fRepNameKana').value.trim();
+    d.industry_code = document.getElementById('fIndustry').value;
+    d.founded_on = document.getElementById('fFounded').value;
+    d.capital = document.getElementById('fCapital').value;
+    d.hq_postal_code = document.getElementById('fPostal').value.trim();
+    d.hq_prefecture = document.getElementById('fPref').value.trim();
+    d.hq_city = document.getElementById('fCity').value.trim();
+    d.hq_street = document.getElementById('fStreet').value.trim();
+    d.hq_phone = document.getElementById('fHqPhone').value.trim();
+    const required = ['corporate_number','company_name','company_name_kana','representative_name','representative_name_kana','industry_code','founded_on','capital','hq_postal_code','hq_prefecture','hq_city','hq_street','hq_phone'];
+    const missing = required.filter(k => !d[k]);
+    if (missing.length > 0) {
+      msg.innerHTML = `<div class="msg msg--err">未入力の項目があります（${missing.length}件）</div>`;
+      return;
+    }
+    if (!/^\d{13}$/.test(d.corporate_number)) return showErr(msg, '法人番号は13桁の数字で入力してください');
+    if (!/^\d{7}$/.test(d.hq_postal_code)) return showErr(msg, '郵便番号は7桁の数字で入力してください');
+    if (!/^\d{10,11}$/.test(d.hq_phone.replace(/[-\s]/g, ''))) return showErr(msg, '本社電話は10〜11桁の数字で入力してください');
+    goTo(3);
+  }
+
+  function saveStep3() {
+    const d = state.data;
+    const msg = document.getElementById('msg3');
+    msg.innerHTML = '';
+    d.contact_name = document.getElementById('fContactName').value.trim();
+    d.contact_name_kana = document.getElementById('fContactNameKana').value.trim();
+    d.contact_email = document.getElementById('fContactEmail').value.trim();
+    d.contact_phone = document.getElementById('fContactPhone').value.trim();
+    const required = ['contact_name','contact_name_kana','contact_email','contact_phone'];
+    const missing = required.filter(k => !d[k]);
+    if (missing.length > 0) return showErr(msg, `未入力の項目があります（${missing.length}件）`);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.contact_email)) return showErr(msg, 'メールアドレスの形式が正しくありません');
+    if (!/^\d{10,11}$/.test(d.contact_phone.replace(/[-\s]/g, ''))) return showErr(msg, '担当者電話は10〜11桁の数字で入力してください');
+    if (d.contact_email !== state.invitation.invited_email) {
+      if (!confirm('招待時のメールアドレスと異なります。このまま続行しますか？')) return;
+    }
+    goTo(4);
+  }
+
+  function saveStep4() {
+    const d = state.data;
+    const msg = document.getElementById('msg4');
+    msg.innerHTML = '';
+    d.bank_info = {
+      bank_name: document.getElementById('fBankName').value.trim(),
+      branch_name: document.getElementById('fBranchName').value.trim(),
+      account_type: document.getElementById('fAcctType').value,
+      account_number: document.getElementById('fAcctNum').value.trim(),
+      account_holder: document.getElementById('fAcctHolder').value.trim(),
+      memo: document.getElementById('fBankMemo').value.trim()
+    };
+    const bi = d.bank_info;
+    const required = ['bank_name','branch_name','account_type','account_number','account_holder'];
+    const missing = required.filter(k => !bi[k]);
+    if (missing.length > 0) return showErr(msg, `未入力の項目があります（${missing.length}件）`);
+    if (!/^\d{4,10}$/.test(bi.account_number)) return showErr(msg, '口座番号は数字4〜10桁で入力してください');
+    goTo(5);
+  }
+
+  async function submitAll() {
+    const d = state.data;
+    const msg = document.getElementById('msg5');
+    msg.innerHTML = '';
+    d.login_id = document.getElementById('fLoginId').value.trim();
+    d.password = document.getElementById('fPw').value;
+    d.password2 = document.getElementById('fPw2').value;
+    d.consents = {
+      terms: document.getElementById('cTerms').checked,
+      antisocial: document.getElementById('cAnti').checked,
+      privacy: document.getElementById('cPriv').checked,
+      agreement: document.getElementById('cAgr').checked
+    };
+
+    if (!/^[A-Za-z0-9_-]{3,40}$/.test(d.login_id)) return showErr(msg, 'ログインIDは半角英数字・ハイフン・アンダースコアで3〜40文字');
+    if (d.password.length < 8) return showErr(msg, 'パスワードは8文字以上で設定してください');
+    if (d.password !== d.password2) return showErr(msg, 'パスワード（確認）が一致しません');
+    if (!d.consents.terms || !d.consents.antisocial || !d.consents.privacy || !d.consents.agreement) {
+      return showErr(msg, '4つすべての項目に同意が必要です');
+    }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '送信中…';
+    try {
+      const API_BASE = window.ADAPT_CONFIG?.API_BASE || '';
+      const payload = {
+        token,
+        corporate_number: d.corporate_number,
+        company_name: d.company_name,
+        company_name_kana: d.company_name_kana,
+        representative_name: d.representative_name,
+        representative_name_kana: d.representative_name_kana,
+        hq_postal_code: d.hq_postal_code,
+        hq_prefecture: d.hq_prefecture,
+        hq_city: d.hq_city,
+        hq_street: d.hq_street,
+        hq_phone: d.hq_phone,
+        industry_code: d.industry_code,
+        founded_on: d.founded_on,
+        capital: Number(d.capital),
+        contact_name: d.contact_name,
+        contact_name_kana: d.contact_name_kana,
+        contact_email: d.contact_email,
+        contact_phone: d.contact_phone,
+        bank_info: d.bank_info,
+        login_id: d.login_id,
+        password: d.password,
+        consents: d.consents
+      };
+      const res = await fetch(API_BASE + '/api/partner-invitations/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const map = {
+          invalid_token: '招待トークンが無効です',
+          invalid_status: 'この招待は既に使用済みまたは失効しています',
+          expired: '招待の有効期限が切れています',
+          login_id_taken: 'このログインIDは既に使用されています',
+          consent_required: '同意チェックが不足しています',
+          missing_fields: '必須項目が不足しています',
+          invalid_corporate_number: '法人番号のチェックデジットが不正です',
+          invalid_login_id: 'ログインIDの形式が不正です',
+          password_too_short: 'パスワードは8文字以上必要です',
+          nta_verification_failed: '法人番号の照会に失敗しました'
+        };
+        const m = map[data.error] || ('エラー: ' + data.error);
+        showErr(msg, data.fields ? m + '（' + data.fields.join(', ') + '）' : m);
+        btn.disabled = false;
+        btn.textContent = '登録を申込む';
+        return;
+      }
+      state.currentStep = 99;
+      renderStep();
+    } catch (e) {
+      showErr(msg, '送信エラー: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = '登録を申込む';
+    }
+  }
+
+  function showErr(el, text) {
+    el.innerHTML = `<div class="msg msg--err">${escapeHtml(text)}</div>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  function industryOptions(selected) {
+    const list = [
+      ['A', 'A 農業,林業'],
+      ['B', 'B 漁業'],
+      ['C', 'C 鉱業,採石業,砂利採取業'],
+      ['D', 'D 建設業'],
+      ['E', 'E 製造業'],
+      ['F', 'F 電気・ガス・熱供給・水道業'],
+      ['G', 'G 情報通信業'],
+      ['H', 'H 運輸業,郵便業'],
+      ['I', 'I 卸売業,小売業'],
+      ['J', 'J 金融業,保険業'],
+      ['K', 'K 不動産業,物品賃貸業'],
+      ['L', 'L 学術研究,専門・技術サービス業'],
+      ['M', 'M 宿泊業,飲食サービス業'],
+      ['N', 'N 生活関連サービス業,娯楽業'],
+      ['O', 'O 教育,学習支援業'],
+      ['P', 'P 医療,福祉'],
+      ['Q', 'Q 複合サービス事業'],
+      ['R', 'R サービス業（他に分類されないもの）'],
+      ['S', 'S 公務（他に分類されるものを除く）'],
+      ['T', 'T 分類不能の産業']
+    ];
+    return list.map(([v, label]) =>
+      `<option value="${v}"${v===selected?' selected':''}>${escapeHtml(label)}</option>`
+    ).join('');
+  }
+})();
+</script>
+</body>
+</html>
