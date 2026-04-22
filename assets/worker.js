@@ -1683,11 +1683,14 @@ ${resetUrl}
         const p = r.partner;
 
         let codes = [p.code];
+        let subAgentCodes = [];
         if (p.type === 'super') {
           const subs = await db.prepare(
-            "SELECT code FROM partners WHERE parent_partner_id = ? AND status != 'terminated'"
+            "SELECT partner_id, code, company_name FROM partners WHERE parent_partner_id = ? AND status != 'terminated'"
           ).bind(p.partner_id).all();
-          codes = codes.concat((subs.results || []).map(x => x.code));
+          const subList = subs.results || [];
+          subAgentCodes = subList.map(x => ({ code: x.code, company_name: x.company_name, partner_id: x.partner_id }));
+          codes = codes.concat(subList.map(x => x.code));
         }
 
         const placeholders = codes.map(() => '?').join(',');
@@ -1704,7 +1707,8 @@ ${resetUrl}
           ok: true,
           customers: rows.results || [],
           my_code: p.code,
-          is_super: p.type === 'super'
+          is_super: p.type === 'super',
+          sub_agent_codes: subAgentCodes  // Phase 4-3e: UI フィルタ用
         }, 200, cors);
       }
 
@@ -1794,6 +1798,42 @@ ${resetUrl}
       }
 
       // =============== Phase 4-3a: super→agent 按分率管理 ===============
+
+      // Phase 4-3e: 特定パートナー代理店のご紹介先企業一覧（super のみ）
+      const partnerSubCustomersMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/customers$/);
+      if (partnerSubCustomersMatch && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        if (r.partner.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+        const agentId = partnerSubCustomersMatch[1];
+
+        const agent = await db.prepare(
+          "SELECT partner_id, code, company_name, parent_partner_id FROM partners WHERE partner_id = ?"
+        ).bind(agentId).first();
+        if (!agent) return json({ error: 'partner_not_found' }, 404, cors);
+        if (agent.parent_partner_id !== r.partner.partner_id) {
+          return json({ error: 'not_your_sub_agent' }, 403, cors);
+        }
+
+        const rows = await db.prepare(
+          `SELECT c.company_id, c.name, c.email, c.phone, c.partner_code, c.partner_code_locked_at, c.created_at,
+                  (SELECT COUNT(*) FROM master_staff WHERE master_company_id = c.company_id) AS staff_count,
+                  (SELECT COUNT(*) FROM subscriptions WHERE master_company_id = c.company_id AND status = 'active') AS active_subs
+             FROM master_companies c
+            WHERE c.partner_code = ?
+            ORDER BY c.created_at DESC`
+        ).bind(agent.code).all();
+
+        return json({
+          ok: true,
+          sub_agent: {
+            partner_id: agent.partner_id,
+            code: agent.code,
+            company_name: agent.company_name
+          },
+          customers: rows.results || []
+        }, 200, cors);
+      }
 
       // パートナー代理店の按分率履歴を取得（super のみ）
       const partnerSubShareHistoryMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/share-history$/);
@@ -2098,6 +2138,102 @@ ${resetUrl}
       }
 
       // =============== Phase 4-3a: タムジ→総代理店 按分率管理 ===============
+
+      // 総代理店詳細ドリルダウン（Phase 4-3e）
+      const adminPartnerDetailMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/detail$/);
+      if (adminPartnerDetailMatch && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminPartnerDetailMatch[1];
+
+        // 基本情報
+        const partner = await db.prepare(
+          "SELECT p.partner_id, p.type, p.parent_partner_id, p.company_name, p.code, p.login_id, " +
+          "       p.email, p.phone, p.contract_start_at, p.contract_end_at, p.status, p.revenue_share_pct, " +
+          "       p.bank_info_json, p.created_at, p.updated_at " +
+          "  FROM partners p WHERE p.partner_id = ?"
+        ).bind(partnerId).first();
+        if (!partner) return json({ error: 'partner_not_found' }, 404, cors);
+
+        let bankInfo = null;
+        try { bankInfo = partner.bank_info_json ? JSON.parse(partner.bank_info_json) : null; } catch {}
+
+        // 対象 partner_code 群を決める（super の場合は自 + パートナー代理店）
+        const isSuper = partner.type === 'super';
+        let ownerCodes = [partner.code];
+        let subAgents = [];
+
+        if (isSuper) {
+          const subRows = await db.prepare(
+            "SELECT a.partner_id, a.code, a.company_name, a.login_id, a.email, " +
+            "       a.contract_start_at, a.contract_end_at, a.status, " +
+            "       (SELECT COUNT(*) FROM master_companies mc WHERE mc.partner_code = a.code) AS customer_count " +
+            "  FROM partners a WHERE a.parent_partner_id = ? ORDER BY a.created_at DESC"
+          ).bind(partnerId).all();
+          subAgents = subRows.results || [];
+          for (const sa of subAgents) ownerCodes.push(sa.code);
+        }
+
+        // ご紹介先企業一覧（partner_code で紐付く master_companies）
+        const placeholders = ownerCodes.map(() => '?').join(',');
+        const customersRes = await db.prepare(
+          "SELECT mc.company_id, mc.name, mc.email, mc.phone, mc.status, " +
+          "       mc.partner_code, mc.created_at, " +
+          "       (SELECT COUNT(*) FROM users u WHERE u.org_id = mc.company_id) AS staff_count, " +
+          "       (SELECT COUNT(*) FROM subscriptions s " +
+          "         WHERE s.master_company_id = mc.company_id AND s.status = 'active') AS active_subs " +
+          "  FROM master_companies mc " +
+          " WHERE mc.partner_code IN (" + placeholders + ") " +
+          " ORDER BY mc.created_at DESC"
+        ).bind(...ownerCodes).all();
+
+        // 月別売上推移（直近12ヶ月・partner_code = partner.code の分のみ=タムジ視点）
+        const monthlyRevenue = isSuper ? await db.prepare(
+          "SELECT year_month, " +
+          "       COALESCE(SUM(gross_amount),0) AS gross_amount, " +
+          "       COALESCE(SUM(share_amount),0) AS share_amount, " +
+          "       SUM(CASE WHEN status='paid' THEN share_amount ELSE 0 END) AS paid_amount, " +
+          "       SUM(CASE WHEN status='pending' THEN share_amount ELSE 0 END) AS pending_amount, " +
+          "       COUNT(*) AS entry_count " +
+          "  FROM revenue_ledger WHERE partner_code = ? " +
+          " GROUP BY year_month ORDER BY year_month DESC LIMIT 12"
+        ).bind(partner.code).all() : { results: [] };
+
+        // 台帳サマリー（総額）
+        const ledgerSummary = isSuper ? await db.prepare(
+          "SELECT " +
+          "  COUNT(*) AS total_entries, " +
+          "  COALESCE(SUM(share_amount),0) AS total_share, " +
+          "  SUM(CASE WHEN status='paid'    THEN share_amount ELSE 0 END) AS paid_total, " +
+          "  SUM(CASE WHEN status='pending' THEN share_amount ELSE 0 END) AS pending_total " +
+          "  FROM revenue_ledger WHERE partner_code = ?"
+        ).bind(partner.code).first() : null;
+
+        return json({
+          ok: true,
+          partner: {
+            partner_id: partner.partner_id,
+            type: partner.type,
+            parent_partner_id: partner.parent_partner_id,
+            company_name: partner.company_name,
+            code: partner.code,
+            login_id: partner.login_id,
+            email: partner.email,
+            phone: partner.phone,
+            contract_start_at: partner.contract_start_at,
+            contract_end_at: partner.contract_end_at,
+            status: partner.status,
+            revenue_share_pct: partner.revenue_share_pct,
+            bank_info: bankInfo,
+            created_at: partner.created_at,
+            updated_at: partner.updated_at
+          },
+          sub_agents: subAgents,
+          customers: customersRes.results || [],
+          monthly_revenue: (monthlyRevenue.results || []).reverse(), // 古→新
+          ledger_summary: ledgerSummary || null
+        }, 200, cors);
+      }
 
       // 総代理店の按分率履歴を取得
       const adminShareHistoryMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/share-history$/);

@@ -226,6 +226,7 @@
                 <td>${statusLabel(a.status)}</td>
                 <td>
                   ${a.status === 'active' ? `
+                    <button class="btn btn--sm" data-agent-detail="${a.partner_id}" data-agent-company="${Adapt.escapeHTML(a.company_name)}" data-agent-code="${Adapt.escapeHTML(a.code)}">詳細</button>
                     <button class="btn btn--sm" data-share-edit="${a.partner_id}" data-share-pct="${a.share_pct ?? ''}" data-share-company="${Adapt.escapeHTML(a.company_name)}">按分率</button>
                     <button class="btn btn--sm" data-share-history="${a.partner_id}" data-share-company="${Adapt.escapeHTML(a.company_name)}">履歴</button>
                   ` : ''}
@@ -254,47 +255,102 @@
           });
         });
       });
+      // Phase 4-3e: パートナー代理店詳細モーダル
+      el.querySelectorAll('[data-agent-detail]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openSubAgentDetailModal({
+            agentId: btn.dataset.agentDetail,
+            agentCode: btn.dataset.agentCode,
+            companyName: btn.dataset.agentCompany
+          });
+        });
+      });
     } catch (e) {
       el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
     }
   }
 
   // --- ご紹介先企業一覧 ---
+  let _customersCache = [];
+  let _customersMeta = { my_code: '', is_super: false, sub_agent_codes: [] };
   (async function loadCustomers() {
     const el = document.getElementById('customersContent');
     el.innerHTML = '<p class="muted">読み込み中…</p>';
     try {
       const r = await PartnerAPI.call('/api/partner/customers');
-      const list = r.customers || [];
-      if (list.length === 0) {
-        el.innerHTML = `<p class="muted">ご紹介先企業はまだいません。代理店コードを案内して登録してもらってください。</p>`;
-        return;
+      _customersCache = r.customers || [];
+      _customersMeta = {
+        my_code: r.my_code,
+        is_super: r.is_super,
+        sub_agent_codes: r.sub_agent_codes || []
+      };
+      renderCustomers('all');
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  })();
+
+  function renderCustomers(filter) {
+    const el = document.getElementById('customersContent');
+    const full = _customersCache;
+    if (full.length === 0) {
+      el.innerHTML = `<p class="muted">ご紹介先企業はまだいません。代理店コードを案内して登録してもらってください。</p>`;
+      return;
+    }
+    // フィルタ適用
+    let list = full;
+    if (filter === 'direct') list = full.filter(c => c.partner_code === _customersMeta.my_code);
+    else if (filter && filter !== 'all') list = full.filter(c => c.partner_code === filter);
+
+    // フィルタドロップダウン（super のみ表示）
+    let filterUI = '';
+    if (_customersMeta.is_super) {
+      const options = [
+        `<option value="all"${filter === 'all' ? ' selected' : ''}>すべて (${full.length})</option>`,
+        `<option value="direct"${filter === 'direct' ? ' selected' : ''}>直販のみ (${full.filter(c => c.partner_code === _customersMeta.my_code).length})</option>`
+      ];
+      for (const sa of _customersMeta.sub_agent_codes) {
+        const n = full.filter(c => c.partner_code === sa.code).length;
+        options.push(`<option value="${Adapt.escapeHTML(sa.code)}"${filter === sa.code ? ' selected' : ''}>${Adapt.escapeHTML(sa.code)} ${Adapt.escapeHTML(sa.company_name)} (${n})</option>`);
       }
-      el.innerHTML = `
+      filterUI = `
+        <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;color:#666;">フィルタ：</label>
+          <select id="customerFilter" style="padding:4px 8px;font-size:12px;">
+            ${options.join('')}
+          </select>
+          <span style="font-size:11px;color:#999;">${list.length}社 表示中</span>
+        </div>`;
+    }
+
+    el.innerHTML = `
+        ${filterUI}
         <table>
           <thead><tr>
             <th>会社ID</th><th>会社名</th><th>メール</th>
             <th>パートナーコード</th><th>スタッフ数</th><th>有料契約</th><th>登録日</th>
           </tr></thead>
           <tbody>
-            ${list.map(c => `
+            ${list.map(c => {
+              const isDirect = c.partner_code === _customersMeta.my_code;
+              return `
               <tr>
                 <td class="mono">${Adapt.escapeHTML(c.company_id)}</td>
                 <td>${Adapt.escapeHTML(c.name)}</td>
                 <td>${Adapt.escapeHTML(c.email || '-')}</td>
-                <td class="mono">${Adapt.escapeHTML(c.partner_code || '-')}</td>
+                <td class="mono"${isDirect ? ' style="color:#c4432b;font-weight:700;"' : ''}>${Adapt.escapeHTML(c.partner_code || '-')}${isDirect ? ' <span style="font-size:10px;font-weight:normal;">（直販）</span>' : ''}</td>
                 <td class="mono">${c.staff_count}</td>
                 <td class="mono">${c.active_subs}</td>
                 <td class="mono">${formatDate(c.created_at)}</td>
-              </tr>
-            `).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       `;
-    } catch (e) {
-      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
-    }
-  })();
+    // フィルタ変更イベント
+    const sel = document.getElementById('customerFilter');
+    if (sel) sel.addEventListener('change', (e) => renderCustomers(e.target.value));
+  }
 
   // --- パートナー代理店登録モーダル ---
   function openAddAgentModal() {
@@ -608,6 +664,89 @@
     } catch (e) {
       document.getElementById('shareHistContent').innerHTML =
         `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  // =====================================================
+  // Phase 4-3e: パートナー代理店詳細モーダル（super 側）
+  // GET /api/partner/sub-agents/:agent_id/customers
+  // =====================================================
+  async function openSubAgentDetailModal({ agentId, agentCode, companyName }) {
+    const wrap = getShareModalWrap();
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="detailBackdrop">
+        <div class="modal" style="max-width:760px;">
+          <h3>パートナー代理店詳細 - ${Adapt.escapeHTML(agentId)}</h3>
+          <p style="font-size:12px;color:#666;margin:0 0 12px 0;">
+            ${Adapt.escapeHTML(companyName || '')} <span class="mono" style="margin-left:8px;">コード: ${Adapt.escapeHTML(agentCode || '-')}</span>
+          </p>
+          <div id="subDetailContent"><p class="muted">読み込み中…</p></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn--primary" id="subDetailClose">閉じる</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('detailBackdrop').addEventListener('click', e => {
+      if (e.target.id === 'detailBackdrop') closeShareModal();
+    });
+    document.getElementById('subDetailClose').addEventListener('click', closeShareModal);
+    try {
+      const r = await PartnerAPI.call(`/api/partner/sub-agents/${agentId}/customers`);
+      const list = r.customers || [];
+      const c = document.getElementById('subDetailContent');
+      if (list.length === 0) {
+        c.innerHTML = `
+          <p class="muted">このパートナー代理店にはまだご紹介先企業がいません。</p>
+          <p style="font-size:12px;color:#666;">相手先にパートナーコード「<strong class="mono">${Adapt.escapeHTML(agentCode || '-')}</strong>」を案内して、ご紹介先企業の登録を促してください。</p>
+        `;
+        return;
+      }
+      const totalStaff = list.reduce((s, x) => s + (x.staff_count || 0), 0);
+      const totalActiveSubs = list.reduce((s, x) => s + (x.active_subs || 0), 0);
+      c.innerHTML = `
+        <div class="metric-grid" style="margin-bottom:12px;">
+          <div class="metric">
+            <div class="metric__label">ご紹介先企業</div>
+            <div class="metric__value">${list.length}<span class="metric__unit">社</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">合計スタッフ数</div>
+            <div class="metric__value">${totalStaff}<span class="metric__unit">名</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric__label">有料契約</div>
+            <div class="metric__value">${totalActiveSubs}<span class="metric__unit">件</span></div>
+          </div>
+        </div>
+        <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">ご紹介先企業一覧</h4>
+        <div style="max-height:280px;overflow-y:auto;">
+        <table style="font-size:12px;">
+          <thead><tr>
+            <th>会社ID</th><th>会社名</th><th>メール</th><th>スタッフ</th><th>有料契約</th><th>登録日</th>
+          </tr></thead>
+          <tbody>
+            ${list.map(cu => `
+              <tr>
+                <td class="mono">${Adapt.escapeHTML(cu.company_id)}</td>
+                <td>${Adapt.escapeHTML(cu.name)}</td>
+                <td>${Adapt.escapeHTML(cu.email || '-')}</td>
+                <td class="mono">${cu.staff_count}</td>
+                <td class="mono">${cu.active_subs}</td>
+                <td class="mono">${formatDate(cu.created_at)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        </div>
+      `;
+    } catch (e) {
+      const errMap = {
+        not_your_sub_agent: '権限がありません（あなたのパートナー代理店ではありません）',
+        forbidden_super_only: 'この操作は総代理店のみ可能です',
+        partner_not_found: '対象が見つかりません'
+      };
+      document.getElementById('subDetailContent').innerHTML =
+        `<div class="msg msg--err">${errMap[e.message] || '取得失敗: ' + Adapt.escapeHTML(e.message)}</div>`;
     }
   }
 })();

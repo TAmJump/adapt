@@ -267,6 +267,15 @@
           });
         });
       });
+      // Phase 4-3e: 代理店詳細ドリルダウン
+      el.querySelectorAll('[data-detail]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openPartnerDetailModal({
+            partnerId: btn.dataset.detail,
+            companyName: btn.dataset.detailCompany
+          });
+        });
+      });
     } catch (e) {
       el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
     }
@@ -301,6 +310,7 @@
               <td><span class="status-badge status-${p.status}">${statusLabel(p.status)}</span></td>
               <td>
                 ${p.status === 'pending' ? `<button class="btn btn--primary btn--sm" data-approve="${p.partner_id}">承認</button>` : ''}
+                <button class="btn btn--sm" data-detail="${p.partner_id}" data-detail-company="${Adapt.escapeHTML(p.company_name)}">詳細</button>
                 ${isSuper && p.status === 'active' ? `
                   <button class="btn btn--sm" data-share-edit="${p.partner_id}" data-share-pct="${p.revenue_share_pct ?? ''}" data-share-company="${Adapt.escapeHTML(p.company_name)}">按分率</button>
                   <button class="btn btn--sm" data-share-history="${p.partner_id}" data-share-company="${Adapt.escapeHTML(p.company_name)}">履歴</button>
@@ -758,6 +768,166 @@
       }).join('');
     } catch (e) {
       document.getElementById('shareHistContent').innerHTML =
+        `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  // =====================================================
+  // Phase 4-3e: 代理店別ドリルダウンモーダル（admin 側）
+  // GET /api/admin/partners/:partner_id/detail
+  // =====================================================
+  async function openPartnerDetailModal({ partnerId, companyName }) {
+    const wrap = getModalWrap();
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="detailBackdrop">
+        <div class="modal" style="max-width:880px;">
+          <h3>代理店詳細 - ${Adapt.escapeHTML(partnerId)}</h3>
+          <p style="font-size:12px;color:#666;margin:0 0 12px 0;">${Adapt.escapeHTML(companyName || '')}</p>
+          <div id="detailContent"><p class="muted">読み込み中…</p></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn--primary" id="detailClose">閉じる</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('detailBackdrop').addEventListener('click', e => {
+      if (e.target.id === 'detailBackdrop') closeShareModal();
+    });
+    document.getElementById('detailClose').addEventListener('click', closeShareModal);
+    try {
+      const r = await AdaptAPI.call(`/api/admin/partners/${partnerId}/detail`);
+      const p = r.partner;
+      const c = document.getElementById('detailContent');
+
+      const bankHtml = p.bank_info && (p.bank_info.bank_name || p.bank_info.branch_name)
+        ? `${Adapt.escapeHTML(p.bank_info.bank_name || '-')} / ${Adapt.escapeHTML(p.bank_info.branch_name || '-')} / ${Adapt.escapeHTML(p.bank_info.account_type || '')} ${Adapt.escapeHTML(p.bank_info.account_number || '')}`
+        : '<span class="muted">未登録</span>';
+
+      const ls = r.ledger_summary;
+      const mr = r.monthly_revenue || [];
+      const subAgents = r.sub_agents || [];
+      const customers = r.customers || [];
+
+      // 月別売上（最大表示幅でバーチャート風）
+      const maxGross = Math.max(1, ...mr.map(m => m.gross_amount || 0));
+      const monthlyRows = mr.map(m => {
+        const barW = Math.round((m.gross_amount / maxGross) * 100);
+        return `
+          <tr>
+            <td class="mono" style="white-space:nowrap;">${m.year_month}</td>
+            <td class="mono" style="text-align:right;">¥${(m.gross_amount || 0).toLocaleString()}</td>
+            <td class="mono" style="text-align:right;">¥${(m.share_amount || 0).toLocaleString()}</td>
+            <td class="mono" style="text-align:right;color:#15803d;">¥${(m.paid_amount || 0).toLocaleString()}</td>
+            <td class="mono" style="text-align:right;color:#b45309;">¥${(m.pending_amount || 0).toLocaleString()}</td>
+            <td style="min-width:120px;"><div style="background:#fecaca;height:8px;width:${barW}%;border-radius:2px;"></div></td>
+          </tr>`;
+      }).join('');
+
+      c.innerHTML = `
+        <!-- 基本情報 -->
+        <section style="margin-bottom:16px;">
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">基本情報</h4>
+          <table style="font-size:12px;">
+            <tr><th style="width:130px;">種別</th><td>${p.type === 'super' ? '総代理店' : '代理店'}</td></tr>
+            <tr><th>コード / ログインID</th><td class="mono">${Adapt.escapeHTML(p.code)} / ${Adapt.escapeHTML(p.login_id)}</td></tr>
+            <tr><th>メール / 電話</th><td>${Adapt.escapeHTML(p.email || '-')} / ${Adapt.escapeHTML(p.phone || '-')}</td></tr>
+            <tr><th>契約期間</th><td class="mono">${p.contract_start_at ? formatDate(p.contract_start_at) + ' 〜 ' + formatDate(p.contract_end_at) : '未設定'}</td></tr>
+            <tr><th>状態 / 按分率</th><td><span class="status-badge status-${p.status}">${statusLabel(p.status)}</span> / <strong>${p.revenue_share_pct != null ? p.revenue_share_pct + '%' : '-'}</strong></td></tr>
+            <tr><th>振込先</th><td>${bankHtml}</td></tr>
+            ${p.parent_partner_id ? `<tr><th>ご担当の総代理店</th><td class="mono">${Adapt.escapeHTML(p.parent_partner_id)}</td></tr>` : ''}
+          </table>
+        </section>
+
+        ${p.type === 'super' ? `
+        <!-- 台帳サマリー -->
+        <section style="margin-bottom:16px;">
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">台帳サマリー（全期間）</h4>
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="metric__label">総按分額</div>
+              <div class="metric__value">¥${(ls?.total_share || 0).toLocaleString()}</div>
+            </div>
+            <div class="metric">
+              <div class="metric__label">支払済</div>
+              <div class="metric__value" style="color:#15803d;">¥${(ls?.paid_total || 0).toLocaleString()}</div>
+            </div>
+            <div class="metric">
+              <div class="metric__label">未払い</div>
+              <div class="metric__value" style="color:#b45309;">¥${(ls?.pending_total || 0).toLocaleString()}</div>
+            </div>
+            <div class="metric">
+              <div class="metric__label">台帳エントリ数</div>
+              <div class="metric__value">${ls?.total_entries || 0}<span class="metric__unit">件</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 月別売上推移 -->
+        <section style="margin-bottom:16px;">
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">月別売上推移（直近12ヶ月）</h4>
+          ${mr.length === 0 ? '<p class="muted">まだ台帳エントリはありません。</p>' : `
+          <table style="font-size:12px;">
+            <thead><tr>
+              <th>年月</th><th style="text-align:right;">売上総額</th><th style="text-align:right;">按分額</th>
+              <th style="text-align:right;">支払済</th><th style="text-align:right;">未払い</th><th></th>
+            </tr></thead>
+            <tbody>${monthlyRows}</tbody>
+          </table>`}
+        </section>
+
+        <!-- パートナー代理店一覧 -->
+        <section style="margin-bottom:16px;">
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">パートナー代理店（${subAgents.length}）</h4>
+          ${subAgents.length === 0 ? '<p class="muted">パートナー代理店はまだいません。</p>' : `
+          <table style="font-size:12px;">
+            <thead><tr>
+              <th>コード</th><th>会社名</th><th>ログインID</th><th>ご紹介先企業</th><th>契約終了</th><th>状態</th>
+            </tr></thead>
+            <tbody>
+              ${subAgents.map(a => `
+                <tr>
+                  <td class="mono">${Adapt.escapeHTML(a.code)}</td>
+                  <td>${Adapt.escapeHTML(a.company_name)}</td>
+                  <td class="mono">${Adapt.escapeHTML(a.login_id)}</td>
+                  <td class="mono">${a.customer_count}社</td>
+                  <td class="mono">${formatDate(a.contract_end_at)}</td>
+                  <td><span class="status-badge status-${a.status}">${statusLabel(a.status)}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`}
+        </section>
+        ` : ''}
+
+        <!-- ご紹介先企業一覧 -->
+        <section>
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">
+            ご紹介先企業（${customers.length}）
+            ${p.type === 'super' ? '<span style="font-size:11px;color:#666;font-weight:normal;margin-left:8px;">※直販＋パートナー代理店経由の合算</span>' : ''}
+          </h4>
+          ${customers.length === 0 ? '<p class="muted">ご紹介先企業はまだいません。</p>' : `
+          <div style="max-height:240px;overflow-y:auto;">
+          <table style="font-size:12px;">
+            <thead><tr>
+              <th>会社ID</th><th>会社名</th><th>パートナーコード</th><th>スタッフ</th><th>有料契約</th><th>登録日</th>
+            </tr></thead>
+            <tbody>
+              ${customers.map(cu => `
+                <tr>
+                  <td class="mono">${Adapt.escapeHTML(cu.company_id)}</td>
+                  <td>${Adapt.escapeHTML(cu.name)}</td>
+                  <td class="mono" ${cu.partner_code === p.code ? 'style="color:#c4432b;font-weight:700;"' : ''}>${Adapt.escapeHTML(cu.partner_code || '-')}${cu.partner_code === p.code ? ' <span style="font-size:10px;font-weight:normal;">（直販）</span>' : ''}</td>
+                  <td class="mono">${cu.staff_count}</td>
+                  <td class="mono">${cu.active_subs}</td>
+                  <td class="mono">${formatDate(cu.created_at)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          </div>`}
+        </section>
+      `;
+    } catch (e) {
+      document.getElementById('detailContent').innerHTML =
         `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
     }
   }
