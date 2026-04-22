@@ -203,6 +203,7 @@
           ` : ''}
         </div>
         ${contractNote}
+        ${renderContractRequestUI(p, daysLeft)}
       </section>
 
       <section class="card">
@@ -243,6 +244,7 @@
     Adapt.bindPasswordToggles();
     bindEditHandlers(p);
     bindPwFormHandler();
+    bindRequestHandlers();
   }
 
   function bindEditHandlers(p) {
@@ -379,6 +381,12 @@
     if (isNaN(d)) return s;
     return d.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
   }
+  function formatDateTime(s) {
+    if (!s) return '-';
+    const d = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
+    if (isNaN(d)) return s;
+    return d.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
   function daysUntil(s) {
     if (!s) return null;
     const d = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
@@ -391,6 +399,161 @@
     if (t === 'ordinary') return '普通';
     if (t === 'checking') return '当座';
     return t;
+  }
+
+  // Phase 4-3d: 契約継続/終了 申請 UI
+  function renderContractRequestUI(p, daysLeft) {
+    // terminated / expired は何も表示しない
+    if (p.status !== 'active') return '';
+    if (!p.contract_end_at) return '';
+
+    // 既に申請中の場合
+    if (p.renewal_requested_at) {
+      return `
+        <div style="margin-top:12px;padding:10px 12px;background:#dcfce7;border-left:3px solid #15803d;border-radius:4px;font-size:13px;">
+          <strong>継続申請中</strong>（${formatDateTime(p.renewal_requested_at)}）<br>
+          タムジ社の承認をお待ちください。
+          ${p.renewal_note ? `<div style="margin-top:4px;padding:4px 8px;background:#fff;border-radius:3px;font-size:12px;">備考: ${escapeText(p.renewal_note)}</div>` : ''}
+          <div class="edit-actions" style="margin-top:8px;">
+            <button class="btn btn--sm" id="renewalCancelBtn" type="button">申請を取り消す</button>
+          </div>
+        </div>`;
+    }
+    if (p.terminate_requested_at) {
+      return `
+        <div style="margin-top:12px;padding:10px 12px;background:#fef3c7;border-left:3px solid #b45309;border-radius:4px;font-size:13px;">
+          <strong>終了申請中</strong>（${formatDateTime(p.terminate_requested_at)}）<br>
+          承認されると契約が終了します。
+          ${p.terminate_note ? `<div style="margin-top:4px;padding:4px 8px;background:#fff;border-radius:3px;font-size:12px;">備考: ${escapeText(p.terminate_note)}</div>` : ''}
+          <div class="edit-actions" style="margin-top:8px;">
+            <button class="btn btn--sm" id="terminateCancelBtn" type="button">申請を取り消す</button>
+          </div>
+        </div>`;
+    }
+
+    // 60日以内の場合：継続申請ボタン + 終了申請ボタン
+    if (daysLeft !== null && daysLeft <= 60 && daysLeft >= 0) {
+      return `
+        <div style="margin-top:12px;padding:10px 12px;background:#f9fafb;border:1px solid #e3e3e0;border-radius:4px;">
+          <p style="margin:0 0 8px 0;font-size:13px;">
+            <strong>契約期間に関する申請</strong>（契約終了まで ${daysLeft}日）
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn--primary btn--sm" id="renewalReqBtn" type="button">継続を申請する</button>
+            <button class="btn btn--sm" id="terminateReqBtn" type="button">終了を申請する</button>
+          </div>
+          <p class="edit-note" style="margin-top:8px;">
+            ※ 申請後、タムジ社の承認後に反映されます。
+          </p>
+        </div>`;
+    }
+
+    // 60日超の場合は案内のみ
+    return `
+      <p class="edit-note" style="margin-top:8px;">
+        契約期間に関する申請（継続/終了）は、契約終了の60日前からご利用いただけます。
+      </p>`;
+  }
+
+  function escapeText(s) {
+    return Adapt.escapeHTML(s || '');
+  }
+
+  // 申請ボタンのイベントバインド（render 内で呼ぶ）
+  function bindRequestHandlers() {
+    const renewalBtn = document.getElementById('renewalReqBtn');
+    if (renewalBtn) renewalBtn.addEventListener('click', () => openRequestModal('renewal'));
+    const terminateBtn = document.getElementById('terminateReqBtn');
+    if (terminateBtn) terminateBtn.addEventListener('click', () => openRequestModal('terminate'));
+    const cancelRenewalBtn = document.getElementById('renewalCancelBtn');
+    if (cancelRenewalBtn) cancelRenewalBtn.addEventListener('click', () => cancelRequest('renewal'));
+    const cancelTerminateBtn = document.getElementById('terminateCancelBtn');
+    if (cancelTerminateBtn) cancelTerminateBtn.addEventListener('click', () => cancelRequest('terminate'));
+  }
+
+  function openRequestModal(type) {
+    const title = type === 'renewal' ? '継続申請' : '終了申請';
+    const confirmLabel = type === 'renewal' ? '継続を申請する' : '終了を申請する';
+    const msg = type === 'renewal'
+      ? '契約を継続して +1年延長を申請します。タムジ社の承認後、契約終了予定日が延長されます。'
+      : '契約を終了する申請を行います。タムジ社の承認後、契約が終了します（当日付）。';
+
+    let wrap = document.getElementById('reqModalWrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'reqModalWrap';
+      document.body.appendChild(wrap);
+    }
+    wrap.innerHTML = `
+      <div style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9000;display:flex;align-items:center;justify-content:center;" id="reqBackdrop">
+        <div style="background:#fff;border-radius:8px;padding:24px 28px;max-width:480px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+          <h3 style="margin:0 0 12px 0;font-size:16px;">${title}</h3>
+          <p style="font-size:13px;color:#444;margin:0 0 12px 0;">${msg}</p>
+          <div id="reqMsg"></div>
+          <form id="reqForm" class="stack" novalidate>
+            <div class="field">
+              <label for="reqNote">備考（任意）</label>
+              <textarea id="reqNote" rows="3" maxlength="500" placeholder="ご要望やメッセージがあればご記入ください"></textarea>
+            </div>
+            <div class="edit-actions">
+              <button type="button" class="btn" id="reqCancel">キャンセル</button>
+              <button type="submit" class="btn ${type === 'renewal' ? 'btn--primary' : ''}" id="reqSubmit">${confirmLabel}</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+
+    const close = () => { wrap.innerHTML = ''; };
+    document.getElementById('reqBackdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'reqBackdrop') close();
+    });
+    document.getElementById('reqCancel').addEventListener('click', close);
+    document.getElementById('reqForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById('reqMsg');
+      const btn = document.getElementById('reqSubmit');
+      msgEl.innerHTML = '';
+      const note = document.getElementById('reqNote').value.trim();
+      btn.disabled = true;
+      btn.textContent = '送信中…';
+      try {
+        const endpoint = type === 'renewal' ? '/api/partner/renewal-request' : '/api/partner/terminate-request';
+        await PartnerAPI.call(endpoint, { method: 'POST', body: { note } });
+        Adapt.toast(type === 'renewal' ? '継続申請を受け付けました' : '終了申請を受け付けました', 'success');
+        close();
+        const fresh = await PartnerAPI.call('/api/partner/me');
+        render(fresh.partner);
+      } catch (e) {
+        const map = {
+          too_early: '契約終了60日前以降にのみ申請可能です',
+          contract_already_ended: '契約は既に終了しています',
+          not_active: '現在ステータスでは申請できません',
+          already_requested: '既に申請中です',
+          renewal_pending: '継続申請が保留中です（先にそれを取り消してください）',
+          terminate_pending: '終了申請が保留中です（先にそれを取り消してください）',
+          note_too_long: '備考は500文字以内で入力してください'
+        };
+        msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = confirmLabel;
+      }
+    });
+  }
+
+  async function cancelRequest(type) {
+    const label = type === 'renewal' ? '継続申請' : '終了申請';
+    if (!confirm(`${label}を取り消しますか？`)) return;
+    try {
+      await PartnerAPI.call('/api/partner/cancel-request', {
+        method: 'POST',
+        body: { type }
+      });
+      Adapt.toast(`${label}を取り消しました`, 'success');
+      const fresh = await PartnerAPI.call('/api/partner/me');
+      render(fresh.partner);
+    } catch (e) {
+      Adapt.toast('取り消し失敗: ' + e.message, 'error');
+    }
   }
 })();
 </script>

@@ -87,6 +87,7 @@
     <section class="card">
       <div class="tab-bar">
         <button class="tab-btn active" data-tab="partners">代理店管理</button>
+        <button class="tab-btn" data-tab="requests">契約申請 <span id="reqBadge" style="display:none;background:#c4432b;color:#fff;border-radius:100px;padding:1px 7px;font-size:10px;margin-left:4px;">0</span></button>
         <button class="tab-btn" data-tab="ledger">月次台帳</button>
         <button class="tab-btn" data-tab="revenue">売上推移</button>
       </div>
@@ -98,6 +99,15 @@
           <button class="btn btn--primary btn--sm" id="addSuperBtn" type="button">＋ 総代理店を登録</button>
         </div>
         <div id="partnersContent"><p class="muted">読み込み中…</p></div>
+      </div>
+
+      <!-- 契約申請タブ（Phase 4-3d） -->
+      <div id="tab-requests" style="display:none;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <h2 class="panel-title" style="margin:0;">保留中の契約申請</h2>
+          <button class="btn btn--ghost btn--sm" id="reloadReqBtn" type="button">再読み込み</button>
+        </div>
+        <div id="requestsContent"><p class="muted">読み込み中…</p></div>
       </div>
 
       <!-- 月次台帳タブ -->
@@ -141,18 +151,21 @@
   // 初期ロード
   loadSummary();
   loadPartners();
+  loadRequestsBadge();
 
   // タブ切替
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['partners','ledger','revenue'].forEach(k => {
+      ['partners','requests','ledger','revenue'].forEach(k => {
         document.getElementById('tab-' + k).style.display = (k === btn.dataset.tab) ? '' : 'none';
       });
       if (btn.dataset.tab === 'revenue') loadRevenue();
+      if (btn.dataset.tab === 'requests') loadRequests();
     });
   });
+  document.getElementById('reloadReqBtn').addEventListener('click', loadRequests);
 
   // 月次台帳
   const today = new Date();
@@ -600,6 +613,157 @@
   function ledgerStatusLabel(s) {
     const map = { pending: '未払い', paid: '支払済', canceled: '取消' };
     return map[s] || s;
+  }
+
+  // =====================================================
+  // Phase 4-3d: 契約申請（継続/終了）の一覧と承認/却下
+  // =====================================================
+  async function loadRequestsBadge() {
+    try {
+      const r = await AdaptAPI.call('/api/admin/renewal-requests');
+      const n = (r.requests || []).length;
+      const badge = document.getElementById('reqBadge');
+      if (n > 0) {
+        badge.textContent = n;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch {}
+  }
+
+  async function loadRequests() {
+    const el = document.getElementById('requestsContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await AdaptAPI.call('/api/admin/renewal-requests');
+      const list = r.requests || [];
+      if (list.length === 0) {
+        el.innerHTML = `<p class="muted">現在、保留中の契約申請はありません。</p>`;
+        loadRequestsBadge();
+        return;
+      }
+      // 継続/終了 の2グループに分離
+      const renewals = list.filter(x => x.renewal_requested_at);
+      const terminates = list.filter(x => x.terminate_requested_at);
+
+      let html = '';
+      if (renewals.length > 0) {
+        html += `<h3 style="margin-top:4px;">継続申請（${renewals.length}）</h3>`;
+        html += renewals.map(p => renderRequestCard(p, 'renewal')).join('');
+      }
+      if (terminates.length > 0) {
+        html += `<h3 style="margin-top:16px;">終了申請（${terminates.length}）</h3>`;
+        html += terminates.map(p => renderRequestCard(p, 'terminate')).join('');
+      }
+      el.innerHTML = html;
+
+      // イベントバインド
+      el.querySelectorAll('[data-approve-renewal]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = btn.dataset.approveRenewal;
+          if (!confirm(pid + ' の継続申請を承認しますか？\n（契約期間を +1年延長します）')) return;
+          btn.disabled = true;
+          try {
+            const r = await AdaptAPI.call(`/api/admin/partners/${pid}/approve-renewal`, { method: 'POST' });
+            Adapt.toast('継続を承認しました（新契約終了日: ' + new Date(r.new_contract_end_at).toLocaleDateString('ja-JP') + '）', 'success');
+            loadRequests();
+            loadPartners();
+          } catch (e) {
+            Adapt.toast('承認失敗: ' + e.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+      el.querySelectorAll('[data-reject-renewal]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = btn.dataset.rejectRenewal;
+          const reason = prompt('却下理由（任意・500文字以内・相手にメール通知されます）:');
+          if (reason === null) return; // cancel
+          if (!confirm(pid + ' の継続申請を却下します。よろしいですか？')) return;
+          try {
+            await AdaptAPI.call(`/api/admin/partners/${pid}/reject-renewal`, {
+              method: 'POST',
+              body: { reason }
+            });
+            Adapt.toast('継続申請を却下しました', 'success');
+            loadRequests();
+          } catch (e) {
+            Adapt.toast('却下失敗: ' + e.message, 'error');
+          }
+        });
+      });
+      el.querySelectorAll('[data-approve-terminate]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = btn.dataset.approveTerminate;
+          if (!confirm(pid + ' の終了申請を承認します。\n※ 契約が即時終了し、ログインセッションが全て破棄されます。\nよろしいですか？')) return;
+          btn.disabled = true;
+          try {
+            await AdaptAPI.call(`/api/admin/partners/${pid}/approve-terminate`, { method: 'POST' });
+            Adapt.toast('契約を終了しました', 'success');
+            loadRequests();
+            loadPartners();
+          } catch (e) {
+            Adapt.toast('承認失敗: ' + e.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+      el.querySelectorAll('[data-reject-terminate]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = btn.dataset.rejectTerminate;
+          const reason = prompt('却下理由（任意・500文字以内・相手にメール通知されます）:');
+          if (reason === null) return;
+          if (!confirm(pid + ' の終了申請を却下します。よろしいですか？')) return;
+          try {
+            await AdaptAPI.call(`/api/admin/partners/${pid}/reject-terminate`, {
+              method: 'POST',
+              body: { reason }
+            });
+            Adapt.toast('終了申請を却下しました', 'success');
+            loadRequests();
+          } catch (e) {
+            Adapt.toast('却下失敗: ' + e.message, 'error');
+          }
+        });
+      });
+
+      loadRequestsBadge();
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  function renderRequestCard(p, kind) {
+    const requestedAt = kind === 'renewal' ? p.renewal_requested_at : p.terminate_requested_at;
+    const note = kind === 'renewal' ? p.renewal_note : p.terminate_note;
+    const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+    const kindLabel = kind === 'renewal' ? '継続' : '終了';
+    const borderColor = kind === 'renewal' ? '#15803d' : '#b45309';
+    return `
+      <div style="border:1px solid #e3e3e0;border-left:4px solid ${borderColor};border-radius:6px;padding:12px 14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <div>
+            <span class="mono" style="font-weight:700;">${Adapt.escapeHTML(p.partner_id)}</span>
+            <span style="font-size:12px;color:#666;margin-left:8px;">${typeLabel} / ${Adapt.escapeHTML(p.company_name)}</span>
+          </div>
+          <div style="font-size:11px;color:#666;">申請日: ${new Date(requestedAt).toLocaleString('ja-JP')}</div>
+        </div>
+        <div style="font-size:12px;color:#444;margin-top:4px;">
+          契約期間: <span class="mono">${formatDate(p.contract_start_at)} 〜 ${formatDate(p.contract_end_at)}</span>
+          / 連絡先: ${Adapt.escapeHTML(p.email || '-')}
+        </div>
+        ${note ? `<div style="font-size:12px;margin-top:6px;padding:6px 10px;background:#f9fafb;border-radius:3px;">備考: ${Adapt.escapeHTML(note)}</div>` : ''}
+        <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">
+          ${kind === 'renewal' ? `
+            <button class="btn btn--sm" data-reject-renewal="${p.partner_id}">却下</button>
+            <button class="btn btn--primary btn--sm" data-approve-renewal="${p.partner_id}">承認（+1年）</button>
+          ` : `
+            <button class="btn btn--sm" data-reject-terminate="${p.partner_id}">却下</button>
+            <button class="btn btn--sm" data-approve-terminate="${p.partner_id}" style="background:#fee2e2;border-color:#fecaca;color:#b91c1c;">契約終了を承認</button>
+          `}
+        </div>
+      </div>`;
   }
 
   // =====================================================

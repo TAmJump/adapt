@@ -526,6 +526,7 @@ async function runContractNotify2Month(db, env) {
     try {
       const endDate = new Date(p.contract_end_at).toLocaleDateString('ja-JP');
       const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+      const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
       await sendEmail(env, {
         to: p.email,
         subject: `【Adavoo】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
@@ -535,10 +536,17 @@ async function runContractNotify2Month(db, env) {
 いつもAdavooをご利用いただきありがとうございます。
 現在の${typeLabel}契約は ${endDate} に終了予定です。
 
-引き続きご利用をご希望の場合は、代理店ダッシュボードから継続申請を行ってください。
-終了をご希望の場合は、ご連絡または終了承認の操作をお願いします。
+▼ 継続をご希望の場合
+代理店ダッシュボードにログインし、「アカウント設定」→「契約情報」
+の「継続を申請する」ボタンから申請してください。
+タムジ社の承認後、契約期間が +1年延長されます。
 
-代理店ログイン: ${(env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/,'')}/partner-login.html
+▼ 終了をご希望の場合
+同じく「アカウント設定」→「契約情報」の「終了を申請する」ボタン
+から申請してください。タムジ社の承認後、契約が終了します。
+
+代理店ログイン: ${baseUrl}/partner-login.html
+アカウント設定: ${baseUrl}/partner-account.html（ログイン後に開けます）
 
 ご不明な点は no-reply@tamjump.com までお問い合わせください。
 ※ このアドレスには返信できません。`
@@ -1380,7 +1388,7 @@ ${resetUrl}
         }
         // bank_info_json の個別取得（requirePartnerAuth では引かない）
         const bankRow = await db.prepare(
-          "SELECT bank_info_json FROM partners WHERE partner_id = ?"
+          "SELECT bank_info_json, renewal_requested_at, renewal_note, terminate_requested_at, terminate_note, last_renewal_approved_at FROM partners WHERE partner_id = ?"
         ).bind(p.partner_id).first();
         let bankInfo = null;
         try { bankInfo = bankRow?.bank_info_json ? JSON.parse(bankRow.bank_info_json) : null; } catch {}
@@ -1400,7 +1408,12 @@ ${resetUrl}
             contract_end_at: p.contract_end_at,
             revenue_share_pct: p.revenue_share_pct,
             status: p.status,
-            bank_info: bankInfo
+            bank_info: bankInfo,
+            renewal_requested_at: bankRow?.renewal_requested_at || null,
+            renewal_note: bankRow?.renewal_note || null,
+            terminate_requested_at: bankRow?.terminate_requested_at || null,
+            terminate_note: bankRow?.terminate_note || null,
+            last_renewal_approved_at: bankRow?.last_renewal_approved_at || null
           }
         }, 200, cors);
       }
@@ -1502,6 +1515,135 @@ ${resetUrl}
             bank_info: bankInfoUpdated
           }
         }, 200, cors);
+      }
+
+      // =============== Phase 4-3d: 契約継続/終了の代理店申請 ===============
+
+      // 継続申請
+      if (path === '/api/partner/renewal-request' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+
+        if (p.status !== 'active') return json({ error: 'not_active', current_status: p.status }, 400, cors);
+        if (!p.contract_end_at) return json({ error: 'no_contract_end' }, 400, cors);
+
+        // 契約終了60日前以内のみ可能
+        const endDate = new Date(p.contract_end_at);
+        const now = new Date();
+        const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        if (daysLeft > 60) return json({ error: 'too_early', days_left: daysLeft }, 400, cors);
+        if (daysLeft < 0) return json({ error: 'contract_already_ended' }, 400, cors);
+
+        // 既に申請中なら弾く
+        const current = await db.prepare(
+          "SELECT renewal_requested_at, terminate_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(p.partner_id).first();
+        if (current?.renewal_requested_at) return json({ error: 'already_requested', since: current.renewal_requested_at }, 409, cors);
+        if (current?.terminate_requested_at) return json({ error: 'terminate_pending' }, 409, cors);
+
+        const b = (await request.json().catch(() => ({}))) || {};
+        const note = (b.note || '').toString();
+        if (note.length > 500) return json({ error: 'note_too_long' }, 400, cors);
+
+        const nowIso = nowISO();
+        await db.prepare(
+          "UPDATE partners SET renewal_requested_at = ?, renewal_note = ?, updated_at = datetime('now') WHERE partner_id = ?"
+        ).bind(nowIso, note || null, p.partner_id).run();
+
+        await audit(db, 'partner_renewal_requested', null, p.login_id, {
+          partner_id: p.partner_id,
+          contract_end_at: p.contract_end_at,
+          days_left: daysLeft,
+          note: note || null
+        }, request);
+
+        return json({
+          ok: true,
+          requested_at: nowIso,
+          contract_end_at: p.contract_end_at,
+          days_left: daysLeft,
+          note: note || null,
+          message: '継続申請を受け付けました。タムジ社の承認をお待ちください。'
+        }, 200, cors);
+      }
+
+      // 終了申請
+      if (path === '/api/partner/terminate-request' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+
+        if (p.status !== 'active') return json({ error: 'not_active', current_status: p.status }, 400, cors);
+
+        const current = await db.prepare(
+          "SELECT renewal_requested_at, terminate_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(p.partner_id).first();
+        if (current?.terminate_requested_at) return json({ error: 'already_requested', since: current.terminate_requested_at }, 409, cors);
+        if (current?.renewal_requested_at) return json({ error: 'renewal_pending' }, 409, cors);
+
+        const b = (await request.json().catch(() => ({}))) || {};
+        const note = (b.note || '').toString();
+        if (note.length > 500) return json({ error: 'note_too_long' }, 400, cors);
+
+        const nowIso = nowISO();
+        await db.prepare(
+          "UPDATE partners SET terminate_requested_at = ?, terminate_note = ?, updated_at = datetime('now') WHERE partner_id = ?"
+        ).bind(nowIso, note || null, p.partner_id).run();
+
+        await audit(db, 'partner_terminate_requested', null, p.login_id, {
+          partner_id: p.partner_id,
+          contract_end_at: p.contract_end_at,
+          note: note || null
+        }, request);
+
+        return json({
+          ok: true,
+          requested_at: nowIso,
+          note: note || null,
+          message: '終了申請を受け付けました。タムジ社の承認後、契約が終了します。'
+        }, 200, cors);
+      }
+
+      // 申請取り消し（継続 or 終了）
+      if (path === '/api/partner/cancel-request' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+
+        const b = (await request.json().catch(() => ({}))) || {};
+        const type = b.type;
+        if (type !== 'renewal' && type !== 'terminate') {
+          return json({ error: 'invalid_type' }, 400, cors);
+        }
+
+        const current = await db.prepare(
+          "SELECT renewal_requested_at, terminate_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(p.partner_id).first();
+
+        if (type === 'renewal' && !current?.renewal_requested_at) {
+          return json({ error: 'no_pending_renewal' }, 404, cors);
+        }
+        if (type === 'terminate' && !current?.terminate_requested_at) {
+          return json({ error: 'no_pending_terminate' }, 404, cors);
+        }
+
+        if (type === 'renewal') {
+          await db.prepare(
+            "UPDATE partners SET renewal_requested_at = NULL, renewal_note = NULL, updated_at = datetime('now') WHERE partner_id = ?"
+          ).bind(p.partner_id).run();
+        } else {
+          await db.prepare(
+            "UPDATE partners SET terminate_requested_at = NULL, terminate_note = NULL, updated_at = datetime('now') WHERE partner_id = ?"
+          ).bind(p.partner_id).run();
+        }
+
+        await audit(db, 'partner_request_cancelled', null, p.login_id, {
+          partner_id: p.partner_id,
+          type: type
+        }, request);
+
+        return json({ ok: true, type }, 200, cors);
       }
 
       // =============== 代理店パスワード変更・リセット（Phase 4-2） ===============
@@ -2241,6 +2383,244 @@ ${resetUrl}
           ok: true,
           partner: { partner_id: partnerId, status: 'active', contract_start_at: now, contract_end_at: oneYearLater }
         }, 200, cors);
+      }
+
+      // =============== Phase 4-3d: タムジ側 契約申請の承認 ===============
+
+      // 保留中申請一覧
+      if (path === '/api/admin/renewal-requests' && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const rows = await db.prepare(
+          "SELECT partner_id, type, company_name, code, email, contract_start_at, contract_end_at, " +
+          "       status, renewal_requested_at, renewal_note, terminate_requested_at, terminate_note, " +
+          "       last_renewal_approved_at " +
+          "  FROM partners " +
+          " WHERE renewal_requested_at IS NOT NULL OR terminate_requested_at IS NOT NULL " +
+          " ORDER BY COALESCE(renewal_requested_at, terminate_requested_at) ASC"
+        ).all();
+
+        return json({ ok: true, requests: rows.results || [] }, 200, cors);
+      }
+
+      // 継続申請の承認（契約期間を +1年）
+      const adminApproveRenewalMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/approve-renewal$/);
+      if (adminApproveRenewalMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminApproveRenewalMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, contract_end_at, renewal_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (!p.renewal_requested_at) return json({ error: 'no_pending_renewal' }, 400, cors);
+
+        // 現在の契約終了日 or 今日の遅い方から +1年
+        const now = new Date();
+        const currentEnd = p.contract_end_at ? new Date(p.contract_end_at) : now;
+        const base = currentEnd > now ? currentEnd : now;
+        const newEnd = new Date(base.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+        await db.prepare(
+          "UPDATE partners SET " +
+          "  contract_end_at = ?, " +
+          "  renewal_requested_at = NULL, " +
+          "  renewal_note = NULL, " +
+          "  last_renewal_approved_at = datetime('now'), " +
+          "  auto_end_notified_at = NULL, " + // 新契約期間で通知をリセット
+          "  status = 'active', " +
+          "  updated_at = datetime('now') " +
+          "WHERE partner_id = ?"
+        ).bind(newEnd, partnerId).run();
+
+        await audit(db, 'admin_renewal_approved', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId,
+          old_contract_end_at: p.contract_end_at,
+          new_contract_end_at: newEnd
+        }, request);
+
+        // 承認通知メール送信
+        try {
+          const pInfo = await db.prepare(
+            "SELECT company_name, email, type FROM partners WHERE partner_id = ?"
+          ).bind(partnerId).first();
+          if (pInfo?.email) {
+            const typeLabel = pInfo.type === 'super' ? '総代理店' : '代理店';
+            const endDate = new Date(newEnd).toLocaleDateString('ja-JP');
+            await sendEmail(env, {
+              to: pInfo.email,
+              subject: `【Adavoo】契約継続のご承認 / ${pInfo.company_name} 様`,
+              text:
+`${pInfo.company_name} 様
+
+${typeLabel}契約の継続申請をご承認いたしました。
+新しい契約終了予定日: ${endDate}
+
+引き続き Adavoo をよろしくお願いいたします。
+
+--
+TAmJ.Corp
+https://tamjump.com/`
+            });
+          }
+        } catch {}
+
+        return json({
+          ok: true,
+          partner_id: partnerId,
+          new_contract_end_at: newEnd,
+          message: '継続を承認しました。契約期間を1年延長しました。'
+        }, 200, cors);
+      }
+
+      // 継続申請の却下
+      const adminRejectRenewalMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/reject-renewal$/);
+      if (adminRejectRenewalMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminRejectRenewalMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, company_name, email, type, renewal_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (!p.renewal_requested_at) return json({ error: 'no_pending_renewal' }, 400, cors);
+
+        const b = (await request.json().catch(() => ({}))) || {};
+        const reason = (b.reason || '').toString().slice(0, 500);
+
+        await db.prepare(
+          "UPDATE partners SET renewal_requested_at = NULL, renewal_note = NULL, updated_at = datetime('now') WHERE partner_id = ?"
+        ).bind(partnerId).run();
+
+        await audit(db, 'admin_renewal_rejected', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId,
+          reason: reason || null
+        }, request);
+
+        try {
+          if (p.email) {
+            const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+            await sendEmail(env, {
+              to: p.email,
+              subject: `【Adavoo】継続申請について / ${p.company_name} 様`,
+              text:
+`${p.company_name} 様
+
+${typeLabel}契約の継続申請につきまして、誠に申し訳ございませんが今回はご見送りとさせていただきます。
+${reason ? '\n理由:\n' + reason + '\n' : ''}
+詳細につきましてはタムジ社（info@tamjump.com）までお問合せください。
+
+--
+TAmJ.Corp`
+            });
+          }
+        } catch {}
+
+        return json({ ok: true, partner_id: partnerId }, 200, cors);
+      }
+
+      // 終了申請の承認（契約終了）
+      const adminApproveTerminateMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/approve-terminate$/);
+      if (adminApproveTerminateMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminApproveTerminateMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, company_name, email, type, terminate_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (!p.terminate_requested_at) return json({ error: 'no_pending_terminate' }, 400, cors);
+
+        const nowIso = nowISO();
+        await db.batch([
+          db.prepare(
+            "UPDATE partners SET " +
+            "  status = 'terminated', " +
+            "  contract_end_at = ?, " +
+            "  terminate_requested_at = NULL, " +
+            "  terminate_note = NULL, " +
+            "  updated_at = datetime('now') " +
+            "WHERE partner_id = ?"
+          ).bind(nowIso, partnerId),
+          // 既存セッション全消し（即ログアウト）
+          db.prepare("DELETE FROM partner_sessions WHERE partner_id = ?").bind(partnerId)
+        ]);
+
+        await audit(db, 'admin_terminate_approved', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId,
+          terminated_at: nowIso
+        }, request);
+
+        try {
+          if (p.email) {
+            const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+            await sendEmail(env, {
+              to: p.email,
+              subject: `【Adavoo】契約終了のご連絡 / ${p.company_name} 様`,
+              text:
+`${p.company_name} 様
+
+${typeLabel}契約を終了いたしました。
+これまでのご利用、誠にありがとうございました。
+
+--
+TAmJ.Corp`
+            });
+          }
+        } catch {}
+
+        return json({ ok: true, partner_id: partnerId, terminated_at: nowIso }, 200, cors);
+      }
+
+      // 終了申請の却下
+      const adminRejectTerminateMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/reject-terminate$/);
+      if (adminRejectTerminateMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminRejectTerminateMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, company_name, email, type, terminate_requested_at FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (!p.terminate_requested_at) return json({ error: 'no_pending_terminate' }, 400, cors);
+
+        const b = (await request.json().catch(() => ({}))) || {};
+        const reason = (b.reason || '').toString().slice(0, 500);
+
+        await db.prepare(
+          "UPDATE partners SET terminate_requested_at = NULL, terminate_note = NULL, updated_at = datetime('now') WHERE partner_id = ?"
+        ).bind(partnerId).run();
+
+        await audit(db, 'admin_terminate_rejected', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId,
+          reason: reason || null
+        }, request);
+
+        try {
+          if (p.email) {
+            const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+            await sendEmail(env, {
+              to: p.email,
+              subject: `【Adavoo】契約終了申請について / ${p.company_name} 様`,
+              text:
+`${p.company_name} 様
+
+${typeLabel}契約の終了申請につきまして、以下の理由により保留とさせていただきます。
+${reason ? '\n理由:\n' + reason + '\n' : ''}
+ご不明な点はタムジ社（info@tamjump.com）までご連絡ください。
+
+--
+TAmJ.Corp`
+            });
+          }
+        } catch {}
+
+        return json({ ok: true, partner_id: partnerId }, 200, cors);
       }
 
       // =============== Phase 4-3a: タムジ→総代理店 按分率管理 ===============
