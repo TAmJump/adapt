@@ -739,6 +739,77 @@ async function runSyncRevenueSharePct(db) {
 }
 
 // =========================================================
+//  Phase 4-5: 反社再チェック リマインダー Cron
+//  毎月1日 00:15 JST (UTC 15:15 on day 1)
+//  承認から12〜13ヶ月前の active partners を検出し、
+//  admin にリマインダーメール送信
+// =========================================================
+async function runRecurringPartnerCheck(db, env) {
+  const now = new Date();
+  // 12ヶ月前〜13ヶ月前の range
+  const from = new Date(now.getTime() - 13 * 30 * 24 * 60 * 60 * 1000).toISOString();
+  const to = new Date(now.getTime() - 12 * 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const rows = await db.prepare(
+    "SELECT partner_id, type, company_name, code, approved_at, contact_email, email " +
+    "  FROM partners " +
+    " WHERE status = 'active' " +
+    "   AND approved_at IS NOT NULL " +
+    "   AND approved_at >= ? AND approved_at < ?"
+  ).bind(from, to).all();
+
+  const targets = rows.results || [];
+  if (targets.length === 0) {
+    await audit(db, 'cron_recurring_partner_check', null, null, {
+      checked_count: 0, partner_ids: []
+    }, new Request('https://cron'));
+    return { checked_count: 0 };
+  }
+
+  // admin にリマインダーメール
+  const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
+  const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
+  try {
+    const listText = targets.map(p => {
+      const approvedYMD = new Date(p.approved_at).toISOString().slice(0, 10);
+      const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+      return `・${p.partner_id} (${typeLabel} / ${p.company_name})  承認日: ${approvedYMD}`;
+    }).join('\n');
+
+    await sendEmail(env, {
+      to: adminEmail,
+      subject: `【Adavoo】反社再チェック対象 ${targets.length} 件（年次）`,
+      text:
+`タムジ社 管理者 各位
+
+承認から約1年が経過した代理店の反社再チェックをお願いいたします。
+対象は以下の ${targets.length} 件です：
+
+${listText}
+
+管理画面から各代理店の情報を確認し、必要に応じて反社チェック結果を記録してください。
+${baseUrl}/admin-dashboard.html
+
+--
+TAmJ.Corp
+※ このメールは毎月1日 00:15 JST に自動送信されます。`
+    });
+  } catch {}
+
+  // システム通知も各 partner_id に対して記録（admin の参考として partner_notifications に記録）
+  // 注: partner には送らず、admin の可視性のため内部ログのみ
+  await audit(db, 'cron_recurring_partner_check', null, null, {
+    checked_count: targets.length,
+    partner_ids: targets.map(p => p.partner_id)
+  }, new Request('https://cron'));
+
+  return {
+    checked_count: targets.length,
+    partner_ids: targets.map(p => p.partner_id)
+  };
+}
+
+// =========================================================
 //  Square 決済連携（Phase 3f）
 //
 //  必要な環境変数:
@@ -4080,6 +4151,11 @@ TAmJ.Corp`
         // UTC 15:10 = JST 00:10（翌日 AM 0:10）
         result.task = 'sync_revenue_share_pct';
         result.result = await runSyncRevenueSharePct(db);
+      } else if (cron === '15 15 1 * *') {
+        // Phase 4-5 追加: 反社再チェック リマインダー
+        // UTC 15:15 on day 1 = JST 00:15 毎月1日
+        result.task = 'recurring_partner_check';
+        result.result = await runRecurringPartnerCheck(db, env);
       } else {
         result.task = 'unknown_cron';
         result.error = `No handler for cron: ${cron}`;
