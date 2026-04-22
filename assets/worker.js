@@ -321,6 +321,53 @@ const nextSuperId = async (db) => {
 };
 
 // =========================================================
+//  Phase 4-3a 按分率履歴引き当てヘルパ
+//  target_date（YYYY-MM-DD）時点で有効な履歴レコードを1件取得
+//  scope='tamj_to_super' の場合 parent_partner_id は NULL
+//  見つからない場合は null
+// =========================================================
+const resolveShareHistory = async (db, partnerId, targetDate, scope = 'tamj_to_super', parentPartnerId = null) => {
+  let sql =
+    "SELECT id, partner_id, scope, parent_partner_id, pct, effective_from, effective_to " +
+    "  FROM partner_revenue_share_history " +
+    " WHERE partner_id = ? AND scope = ? " +
+    "   AND effective_from <= ? " +
+    "   AND (effective_to IS NULL OR effective_to >= ?)";
+  const binds = [partnerId, scope, targetDate, targetDate];
+  if (scope === 'super_to_agent' && parentPartnerId) {
+    sql += " AND parent_partner_id = ?";
+    binds.push(parentPartnerId);
+  }
+  sql += " ORDER BY effective_from DESC LIMIT 1";
+  return await db.prepare(sql).bind(...binds).first();
+};
+
+// pct バリデーション: 0 <= pct <= 100、小数点第一位まで
+const validatePct = (val) => {
+  if (val === null || val === undefined || val === '') return { ok: false, error: 'invalid_pct' };
+  const n = Number(val);
+  if (Number.isNaN(n) || n < 0 || n > 100) return { ok: false, error: 'invalid_pct' };
+  // 小数点第二位以下切り捨て
+  const rounded = Math.round(n * 10) / 10;
+  return { ok: true, value: rounded };
+};
+
+// YYYY-MM-DD 形式バリデーション
+const validateDateYMD = (s) => {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(s + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return false;
+  return s === d.toISOString().substring(0, 10);
+};
+
+// 今日の日付を YYYY-MM-DD (JST) で取得
+const todayJSTDate = () => {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().substring(0, 10);
+};
+
+// =========================================================
 //  月次台帳（revenue_ledger）集計ロジック
 //  Cron (ledger_monthly_close) と手動再集計APIから共通利用
 //
@@ -334,8 +381,11 @@ async function generateMonthlyLedger(db, yearMonth) {
   const ymStart = `${yearMonth}-01 00:00:00`;
   const [y, m] = yearMonth.split('-').map(Number);
   const nextMonth = m === 12 ? `${y + 1}-01-01 00:00:00` : `${y}-${String(m + 1).padStart(2, '0')}-01 00:00:00`;
+  // 履歴引き当て基準日：集計対象月の1日（YYYY-MM-DD）
+  const targetDate = `${yearMonth}-01`;
 
   // 既存エントリ削除（冪等性確保 — 再集計を可能に）
+  // status='pending' のみ削除。'paid' は Phase 4-3a ルール2により保護
   await db.prepare("DELETE FROM revenue_ledger WHERE year_month = ? AND status = 'pending'")
     .bind(yearMonth).run();
 
@@ -376,12 +426,29 @@ async function generateMonthlyLedger(db, yearMonth) {
   };
 
   // app_name × 支払先総代理店コード で集約
+  // share_history_id は同一 partner では同じなので集約時に一つ記録
   const bucket = {};
+  const shareHistoryCache = {}; // partner_id → history record
   for (const s of (subs.results || [])) {
     const sup = resolvePayoutSuper(s.partner_code);
     if (!sup || sup.type !== 'super') continue;
     const gross = (s.seat_count || 1) * (s.unit_price || 0);
-    const sharePct = (sup.revenue_share_pct !== null && sup.revenue_share_pct !== undefined) ? sup.revenue_share_pct : 0;
+
+    // ★ Phase 4-3a: 履歴から按分率を引き当て ★
+    let sharePct;
+    let shareHistoryId = null;
+    if (shareHistoryCache[sup.partner_id] === undefined) {
+      shareHistoryCache[sup.partner_id] = await resolveShareHistory(db, sup.partner_id, targetDate, 'tamj_to_super', null);
+    }
+    const history = shareHistoryCache[sup.partner_id];
+    if (history) {
+      sharePct = history.pct;
+      shareHistoryId = history.id;
+    } else {
+      // フォールバック：既存 partners.revenue_share_pct を使用（履歴登録前の互換動作）
+      sharePct = (sup.revenue_share_pct !== null && sup.revenue_share_pct !== undefined) ? sup.revenue_share_pct : 0;
+    }
+
     const shareAmount = Math.floor(gross * sharePct / 100);
     const key = `${sup.code}|${s.app_name}`;
     if (!bucket[key]) {
@@ -391,6 +458,7 @@ async function generateMonthlyLedger(db, yearMonth) {
         gross_amount: 0,
         share_pct: sharePct,
         share_amount: 0,
+        share_history_id: shareHistoryId,
         subscription_ids: []
       };
     }
@@ -407,12 +475,13 @@ async function generateMonthlyLedger(db, yearMonth) {
     inserts.push(
       db.prepare(
         "INSERT INTO revenue_ledger (year_month, partner_code, app_name, subscription_id, " +
-        "  gross_amount, share_pct, share_amount, status) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')"
+        "  gross_amount, share_pct, share_amount, share_history_id, status) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
       ).bind(
         yearMonth, b.partner_code, b.app_name,
         b.subscription_ids[0] || null,
-        b.gross_amount, b.share_pct, b.share_amount
+        b.gross_amount, b.share_pct, b.share_amount,
+        b.share_history_id
       )
     );
   }
@@ -527,6 +596,62 @@ async function runCleanupExpiredTokens(db) {
     password_reset_tokens_deleted: results[4].meta?.changes || 0,
     partner_password_reset_tokens_deleted: results[5].meta?.changes || 0
   };
+}
+
+// =========================================================
+//  Phase 4-3a: 按分率の日次同期 Cron
+//  partner_revenue_share_history から「今日発効する」レコードを検索し、
+//  partners.revenue_share_pct に反映する（scope='tamj_to_super' のみ対象）
+//  毎日 00:10 JST = UTC 15:10
+// =========================================================
+async function runSyncRevenueSharePct(db) {
+  const today = todayJSTDate();
+
+  // 今日時点で有効な tamj_to_super 履歴を partner ごとに最新1件取得
+  const rows = await db.prepare(
+    "SELECT h.partner_id, h.pct " +
+    "  FROM partner_revenue_share_history h " +
+    " WHERE h.scope = 'tamj_to_super' " +
+    "   AND h.effective_from <= ? " +
+    "   AND (h.effective_to IS NULL OR h.effective_to >= ?) " +
+    "   AND h.id = ( " +
+    "     SELECT MAX(h2.id) FROM partner_revenue_share_history h2 " +
+    "      WHERE h2.partner_id = h.partner_id AND h2.scope = 'tamj_to_super' " +
+    "        AND h2.effective_from <= ? " +
+    "        AND (h2.effective_to IS NULL OR h2.effective_to >= ?) " +
+    "   )"
+  ).bind(today, today, today, today).all();
+
+  const toSync = rows.results || [];
+  const syncedIds = [];
+  const batchUpdates = [];
+  for (const r of toSync) {
+    // 現在の partners.revenue_share_pct と比較して変わっている場合のみ UPDATE
+    const cur = await db.prepare(
+      "SELECT revenue_share_pct FROM partners WHERE partner_id = ?"
+    ).bind(r.partner_id).first();
+    if (!cur) continue;
+    if (cur.revenue_share_pct === r.pct) continue;
+    batchUpdates.push(
+      db.prepare(
+        "UPDATE partners SET revenue_share_pct = ?, updated_at = datetime('now') WHERE partner_id = ?"
+      ).bind(r.pct, r.partner_id)
+    );
+    syncedIds.push(r.partner_id);
+  }
+  if (batchUpdates.length > 0) await db.batch(batchUpdates);
+
+  // 監査ログ
+  try {
+    await db.prepare("INSERT INTO audit_logs (type, details) VALUES (?, ?)")
+      .bind('cron_share_sync', JSON.stringify({
+        date: today,
+        synced_count: syncedIds.length,
+        partner_ids: syncedIds
+      })).run();
+  } catch {}
+
+  return { date: today, synced_count: syncedIds.length, partner_ids: syncedIds };
 }
 
 // =========================================================
@@ -1590,15 +1715,22 @@ ${resetUrl}
         const p = r.partner;
         if (p.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
 
-        // 各代理店のご紹介先企業数もまとめて返す
+        // 各代理店のご紹介先企業数と現行按分率（super→agent scope）をまとめて返す
+        const today = todayJSTDate();
         const rows = await db.prepare(
           "SELECT a.partner_id, a.code, a.company_name, a.login_id, a.email, a.phone, " +
           "       a.contract_start_at, a.contract_end_at, a.status, a.created_at, " +
-          "       (SELECT COUNT(*) FROM master_companies mc WHERE mc.partner_code = a.code) AS customer_count " +
+          "       (SELECT COUNT(*) FROM master_companies mc WHERE mc.partner_code = a.code) AS customer_count, " +
+          "       (SELECT h.pct FROM partner_revenue_share_history h " +
+          "          WHERE h.partner_id = a.partner_id AND h.scope = 'super_to_agent' " +
+          "            AND h.parent_partner_id = ? " +
+          "            AND h.effective_from <= ? " +
+          "            AND (h.effective_to IS NULL OR h.effective_to >= ?) " +
+          "          ORDER BY h.effective_from DESC LIMIT 1) AS share_pct " +
           "  FROM partners a " +
           " WHERE a.parent_partner_id = ? " +
           " ORDER BY a.created_at DESC"
-        ).bind(p.partner_id).all();
+        ).bind(p.partner_id, today, today, p.partner_id).all();
 
         return json({ ok: true, sub_agents: rows.results || [] }, 200, cors);
       }
@@ -1658,6 +1790,163 @@ ${resetUrl}
             contract_end_at: oneYearLater,
             status: 'active'
           }
+        }, 200, cors);
+      }
+
+      // =============== Phase 4-3a: super→agent 按分率管理 ===============
+
+      // パートナー代理店の按分率履歴を取得（super のみ）
+      const partnerSubShareHistoryMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/share-history$/);
+      if (partnerSubShareHistoryMatch && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        if (r.partner.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+        const agentId = partnerSubShareHistoryMatch[1];
+
+        const agent = await db.prepare(
+          "SELECT partner_id, parent_partner_id, company_name, code FROM partners WHERE partner_id = ?"
+        ).bind(agentId).first();
+        if (!agent) return json({ error: 'partner_not_found' }, 404, cors);
+        if (agent.parent_partner_id !== r.partner.partner_id) {
+          return json({ error: 'not_your_sub_agent' }, 403, cors);
+        }
+
+        const rows = await db.prepare(
+          "SELECT h.id, h.pct, h.effective_from, h.effective_to, h.note, h.created_at, " +
+          "       h.set_by_staff_id, h.set_by_partner_id, " +
+          "       ms.login_id AS set_by_staff_login, " +
+          "       sp.login_id AS set_by_partner_login " +
+          "  FROM partner_revenue_share_history h " +
+          "  LEFT JOIN master_staff ms ON ms.staff_id = h.set_by_staff_id " +
+          "  LEFT JOIN partners sp ON sp.partner_id = h.set_by_partner_id " +
+          " WHERE h.partner_id = ? AND h.scope = 'super_to_agent' AND h.parent_partner_id = ? " +
+          " ORDER BY h.effective_from DESC, h.id DESC"
+        ).bind(agentId, r.partner.partner_id).all();
+
+        const today = todayJSTDate();
+        const current = (rows.results || []).find(h =>
+          h.effective_from <= today && (!h.effective_to || h.effective_to >= today)
+        );
+
+        return json({
+          ok: true,
+          partner_id: agentId,
+          parent_partner_id: r.partner.partner_id,
+          scope: 'super_to_agent',
+          current_pct: current ? current.pct : null,
+          history: (rows.results || []).map(h => ({
+            id: h.id,
+            pct: h.pct,
+            effective_from: h.effective_from,
+            effective_to: h.effective_to,
+            note: h.note,
+            created_at: h.created_at,
+            set_by: h.set_by_staff_login || h.set_by_partner_login || null,
+            set_by_type: h.set_by_staff_id ? 'staff' : (h.set_by_partner_id ? 'partner' : null)
+          }))
+        }, 200, cors);
+      }
+
+      // パートナー代理店の按分率を変更（super のみ）
+      const partnerSubShareSetMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/share$/);
+      if (partnerSubShareSetMatch && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        if (r.partner.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+        const agentId = partnerSubShareSetMatch[1];
+
+        const agent = await db.prepare(
+          "SELECT partner_id, parent_partner_id, company_name, contract_start_at FROM partners WHERE partner_id = ?"
+        ).bind(agentId).first();
+        if (!agent) return json({ error: 'partner_not_found' }, 404, cors);
+        if (agent.parent_partner_id !== r.partner.partner_id) {
+          return json({ error: 'not_your_sub_agent' }, 403, cors);
+        }
+
+        const b = (await request.json()) || {};
+        const pctV = validatePct(b.pct);
+        if (!pctV.ok) return json({ error: pctV.error }, 400, cors);
+        if (!validateDateYMD(b.effective_from || '')) return json({ error: 'invalid_date' }, 400, cors);
+        const note = (b.note || '').toString();
+        if (note.length > 500) return json({ error: 'note_too_long' }, 400, cors);
+
+        const newPct = pctV.value;
+        const effectiveFrom = b.effective_from;
+
+        // 契約開始日より前の発効不可
+        if (agent.contract_start_at) {
+          const contractStart = agent.contract_start_at.substring(0, 10);
+          if (effectiveFrom < contractStart) {
+            return json({ error: 'effective_before_contract', contract_start_at: contractStart }, 400, cors);
+          }
+        }
+
+        // ★ pct_exceeds_parent_share バリデーション
+        // super→agent の pct は、super の tamj_to_super 有効値を超えてはいけない
+        const parentShare = await resolveShareHistory(db, r.partner.partner_id, effectiveFrom, 'tamj_to_super', null);
+        const parentPct = parentShare ? parentShare.pct : r.partner.revenue_share_pct;
+        if (parentPct === null || parentPct === undefined) {
+          return json({ error: 'parent_share_not_set' }, 400, cors);
+        }
+        if (newPct > parentPct) {
+          return json({
+            error: 'pct_exceeds_parent_share',
+            parent_pct: parentPct,
+            message: `パートナー代理店への按分率は、自社の取得率（${parentPct}%）を超えて設定できません`
+          }, 400, cors);
+        }
+
+        // effective_from - 1日 を計算
+        const effDate = new Date(effectiveFrom + 'T00:00:00Z');
+        const prevDay = new Date(effDate.getTime() - 24 * 60 * 60 * 1000);
+        const effectiveToOfOld = prevDay.toISOString().substring(0, 10);
+
+        // 既存レコードで effective_to IS NULL（=現在有効）のものを closing
+        const oldRec = await db.prepare(
+          "SELECT id, pct FROM partner_revenue_share_history " +
+          " WHERE partner_id = ? AND scope = 'super_to_agent' AND parent_partner_id = ? AND effective_to IS NULL " +
+          " ORDER BY effective_from DESC LIMIT 1"
+        ).bind(agentId, r.partner.partner_id).first();
+
+        const stmts = [];
+        if (oldRec) {
+          stmts.push(db.prepare(
+            "UPDATE partner_revenue_share_history SET effective_to = ? WHERE id = ?"
+          ).bind(effectiveToOfOld, oldRec.id));
+        }
+        stmts.push(db.prepare(
+          "INSERT INTO partner_revenue_share_history " +
+          "  (partner_id, scope, parent_partner_id, pct, effective_from, effective_to, set_by_partner_id, note) " +
+          "VALUES (?, 'super_to_agent', ?, ?, ?, NULL, ?, ?)"
+        ).bind(agentId, r.partner.partner_id, newPct, effectiveFrom, r.partner.partner_id, note || null));
+
+        await db.batch(stmts);
+
+        // 新レコードの id を取得
+        const inserted = await db.prepare(
+          "SELECT id FROM partner_revenue_share_history " +
+          " WHERE partner_id = ? AND scope = 'super_to_agent' AND parent_partner_id = ? " +
+          "   AND effective_from = ? AND pct = ? " +
+          " ORDER BY id DESC LIMIT 1"
+        ).bind(agentId, r.partner.partner_id, effectiveFrom, newPct).first();
+
+        await audit(db, 'partner_sub_agent_share_changed', null, r.partner.login_id, {
+          partner_id: agentId,
+          parent_partner_id: r.partner.partner_id,
+          scope: 'super_to_agent',
+          old_pct: oldRec ? oldRec.pct : null,
+          new_pct: newPct,
+          effective_from: effectiveFrom,
+          note: note || null
+        }, request);
+
+        return json({
+          ok: true,
+          history_id: inserted?.id || null,
+          partner_id: agentId,
+          pct: newPct,
+          effective_from: effectiveFrom,
+          note: note || null
         }, 200, cors);
       }
 
@@ -1805,6 +2094,193 @@ ${resetUrl}
         return json({
           ok: true,
           partner: { partner_id: partnerId, status: 'active', contract_start_at: now, contract_end_at: oneYearLater }
+        }, 200, cors);
+      }
+
+      // =============== Phase 4-3a: タムジ→総代理店 按分率管理 ===============
+
+      // 総代理店の按分率履歴を取得
+      const adminShareHistoryMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/share-history$/);
+      if (adminShareHistoryMatch && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminShareHistoryMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, type, company_name, code, revenue_share_pct FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (p.type !== 'super') return json({ error: 'not_super' }, 400, cors);
+
+        const rows = await db.prepare(
+          "SELECT h.id, h.pct, h.effective_from, h.effective_to, h.note, h.created_at, " +
+          "       h.set_by_staff_id, h.set_by_partner_id, " +
+          "       ms.login_id AS set_by_staff_login, " +
+          "       sp.login_id AS set_by_partner_login " +
+          "  FROM partner_revenue_share_history h " +
+          "  LEFT JOIN master_staff ms ON ms.staff_id = h.set_by_staff_id " +
+          "  LEFT JOIN partners sp ON sp.partner_id = h.set_by_partner_id " +
+          " WHERE h.partner_id = ? AND h.scope = 'tamj_to_super' " +
+          " ORDER BY h.effective_from DESC, h.id DESC"
+        ).bind(partnerId).all();
+
+        return json({
+          ok: true,
+          partner_id: partnerId,
+          scope: 'tamj_to_super',
+          current_pct: p.revenue_share_pct,
+          history: (rows.results || []).map(h => ({
+            id: h.id,
+            pct: h.pct,
+            effective_from: h.effective_from,
+            effective_to: h.effective_to,
+            note: h.note,
+            created_at: h.created_at,
+            set_by: h.set_by_staff_login || h.set_by_partner_login || null,
+            set_by_type: h.set_by_staff_id ? 'staff' : (h.set_by_partner_id ? 'partner' : null)
+          }))
+        }, 200, cors);
+      }
+
+      // 総代理店の按分率を変更
+      const adminShareSetMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/share$/);
+      if (adminShareSetMatch && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const partnerId = adminShareSetMatch[1];
+
+        const p = await db.prepare(
+          "SELECT partner_id, type, contract_start_at FROM partners WHERE partner_id = ?"
+        ).bind(partnerId).first();
+        if (!p) return json({ error: 'partner_not_found' }, 404, cors);
+        if (p.type !== 'super') return json({ error: 'not_super' }, 400, cors);
+
+        const b = (await request.json()) || {};
+        const pctV = validatePct(b.pct);
+        if (!pctV.ok) return json({ error: pctV.error }, 400, cors);
+        if (!validateDateYMD(b.effective_from || '')) return json({ error: 'invalid_date' }, 400, cors);
+        const note = (b.note || '').toString();
+        if (note.length > 500) return json({ error: 'note_too_long' }, 400, cors);
+
+        const newPct = pctV.value;
+        const effectiveFrom = b.effective_from;
+        const today = todayJSTDate();
+
+        // 契約開始日より前の発効不可
+        if (p.contract_start_at) {
+          const contractStart = p.contract_start_at.substring(0, 10);
+          if (effectiveFrom < contractStart) {
+            return json({ error: 'effective_before_contract', contract_start_at: contractStart }, 400, cors);
+          }
+        }
+
+        // effective_from - 1日
+        const effDate = new Date(effectiveFrom + 'T00:00:00Z');
+        const prevDay = new Date(effDate.getTime() - 24 * 60 * 60 * 1000);
+        const effectiveToOfOld = prevDay.toISOString().substring(0, 10);
+
+        // 既存の effective_to IS NULL（現在有効）レコードを取得
+        const oldRec = await db.prepare(
+          "SELECT id, pct FROM partner_revenue_share_history " +
+          " WHERE partner_id = ? AND scope = 'tamj_to_super' AND effective_to IS NULL " +
+          " ORDER BY effective_from DESC LIMIT 1"
+        ).bind(partnerId).first();
+
+        const stmts = [];
+        if (oldRec) {
+          stmts.push(db.prepare(
+            "UPDATE partner_revenue_share_history SET effective_to = ? WHERE id = ?"
+          ).bind(effectiveToOfOld, oldRec.id));
+        }
+        stmts.push(db.prepare(
+          "INSERT INTO partner_revenue_share_history " +
+          "  (partner_id, scope, parent_partner_id, pct, effective_from, effective_to, set_by_staff_id, note) " +
+          "VALUES (?, 'tamj_to_super', NULL, ?, ?, NULL, ?, ?)"
+        ).bind(partnerId, newPct, effectiveFrom, r.user.staff_id, note || null));
+
+        // 発効日が今日以下の場合は partners.revenue_share_pct も即 UPDATE
+        if (effectiveFrom <= today) {
+          stmts.push(db.prepare(
+            "UPDATE partners SET revenue_share_pct = ?, updated_at = datetime('now') WHERE partner_id = ?"
+          ).bind(newPct, partnerId));
+        }
+
+        await db.batch(stmts);
+
+        // 新レコードの id を取得
+        const inserted = await db.prepare(
+          "SELECT id FROM partner_revenue_share_history " +
+          " WHERE partner_id = ? AND scope = 'tamj_to_super' " +
+          "   AND effective_from = ? AND pct = ? " +
+          " ORDER BY id DESC LIMIT 1"
+        ).bind(partnerId, effectiveFrom, newPct).first();
+
+        // 遡及影響チェック：effective_from より後の pending ledger を再計算
+        const retroactiveAdjustments = [];
+        // effective_from が今日以前かつ過去月に効果のある設定の場合に遡及チェック
+        const effYearMonth = effectiveFrom.substring(0, 7);
+        const pendingMonths = await db.prepare(
+          "SELECT DISTINCT year_month FROM revenue_ledger " +
+          " WHERE partner_code = ? AND status = 'pending' AND year_month >= ? " +
+          " ORDER BY year_month ASC"
+        ).bind(partnerId, effYearMonth).all();
+
+        for (const m of (pendingMonths.results || [])) {
+          // generateMonthlyLedger が pending のみ DELETE → 新率で INSERT してくれる
+          const recalc = await generateMonthlyLedger(db, m.year_month);
+          retroactiveAdjustments.push({
+            year_month: m.year_month,
+            recalculated_entries: recalc.generated_entry_count,
+            total_share: recalc.total_share
+          });
+          try {
+            await db.prepare("INSERT INTO audit_logs (type, details) VALUES (?, ?)")
+              .bind('ledger_recalculated', JSON.stringify({
+                year_month: m.year_month,
+                partner_id: partnerId,
+                new_pct: newPct,
+                effective_from: effectiveFrom
+              })).run();
+          } catch {}
+        }
+
+        // paid ledger の保護通知（監査のみ）
+        const paidAffected = await db.prepare(
+          "SELECT COUNT(*) AS cnt, COALESCE(SUM(share_amount),0) AS total_share " +
+          "  FROM revenue_ledger " +
+          " WHERE partner_code = ? AND status = 'paid' AND year_month >= ?"
+        ).bind(partnerId, effYearMonth).first();
+        if (paidAffected && paidAffected.cnt > 0) {
+          try {
+            await db.prepare("INSERT INTO audit_logs (type, details) VALUES (?, ?)")
+              .bind('ledger_retroactive_adjustment_skipped', JSON.stringify({
+                partner_id: partnerId,
+                since_year_month: effYearMonth,
+                skipped_count: paidAffected.cnt,
+                total_share_at_paid_time: paidAffected.total_share
+              })).run();
+          } catch {}
+        }
+
+        await audit(db, 'partner_share_changed', r.user.staff_id, r.user.login_id, {
+          partner_id: partnerId,
+          scope: 'tamj_to_super',
+          old_pct: oldRec ? oldRec.pct : null,
+          new_pct: newPct,
+          effective_from: effectiveFrom,
+          effective_to_of_old: oldRec ? effectiveToOfOld : null,
+          note: note || null
+        }, request);
+
+        return json({
+          ok: true,
+          history_id: inserted?.id || null,
+          partner_id: partnerId,
+          pct: newPct,
+          effective_from: effectiveFrom,
+          note: note || null,
+          retroactive_adjustments: retroactiveAdjustments,
+          paid_entries_protected: paidAffected?.cnt || 0
         }, 200, cors);
       }
 
@@ -2151,6 +2627,11 @@ ${resetUrl}
       } else if (cron === '0 18 * * *') {
         result.task = 'cleanup_expired_tokens';
         result.result = await runCleanupExpiredTokens(db);
+      } else if (cron === '10 15 * * *') {
+        // Phase 4-3a 追加: 按分率履歴の日次同期 Cron
+        // UTC 15:10 = JST 00:10（翌日 AM 0:10）
+        result.task = 'sync_revenue_share_pct';
+        result.result = await runSyncRevenueSharePct(db);
       } else {
         result.task = 'unknown_cron';
         result.error = `No handler for cron: ${cron}`;

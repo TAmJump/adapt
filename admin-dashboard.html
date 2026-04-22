@@ -245,6 +245,28 @@
           }
         });
       });
+
+      // 按分率変更ボタン
+      el.querySelectorAll('[data-share-edit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openShareEditModal({
+            partnerId: btn.dataset.shareEdit,
+            companyName: btn.dataset.shareCompany,
+            currentPct: btn.dataset.sharePct !== '' ? Number(btn.dataset.sharePct) : null,
+            scope: 'admin' // admin mode: /api/admin/partners/:id/share
+          });
+        });
+      });
+      // 按分率履歴ボタン
+      el.querySelectorAll('[data-share-history]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openShareHistoryModal({
+            partnerId: btn.dataset.shareHistory,
+            companyName: btn.dataset.shareCompany,
+            scope: 'admin'
+          });
+        });
+      });
     } catch (e) {
       el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
     }
@@ -279,6 +301,10 @@
               <td><span class="status-badge status-${p.status}">${statusLabel(p.status)}</span></td>
               <td>
                 ${p.status === 'pending' ? `<button class="btn btn--primary btn--sm" data-approve="${p.partner_id}">承認</button>` : ''}
+                ${isSuper && p.status === 'active' ? `
+                  <button class="btn btn--sm" data-share-edit="${p.partner_id}" data-share-pct="${p.revenue_share_pct ?? ''}" data-share-company="${Adapt.escapeHTML(p.company_name)}">按分率</button>
+                  <button class="btn btn--sm" data-share-history="${p.partner_id}" data-share-company="${Adapt.escapeHTML(p.company_name)}">履歴</button>
+                ` : ''}
               </td>
             </tr>
           `).join('')}
@@ -564,6 +590,176 @@
   function ledgerStatusLabel(s) {
     const map = { pending: '未払い', paid: '支払済', canceled: '取消' };
     return map[s] || s;
+  }
+
+  // =====================================================
+  // Phase 4-3a: 按分率編集・履歴モーダル
+  // admin モード = /api/admin/partners/:id/share[-history]
+  // =====================================================
+  function getModalWrap() {
+    let wrap = document.getElementById('shareModalWrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'shareModalWrap';
+      document.body.appendChild(wrap);
+    }
+    return wrap;
+  }
+  function closeShareModal() {
+    const wrap = document.getElementById('shareModalWrap');
+    if (wrap) wrap.innerHTML = '';
+  }
+  function todayYMD() {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+  function firstOfNextMonthYMD() {
+    const d = new Date();
+    const y = d.getMonth() === 11 ? d.getFullYear() + 1 : d.getFullYear();
+    const m = d.getMonth() === 11 ? 1 : d.getMonth() + 2;
+    return y + '-' + String(m).padStart(2, '0') + '-01';
+  }
+
+  async function openShareEditModal({ partnerId, companyName, currentPct }) {
+    const wrap = getModalWrap();
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="shareBackdrop">
+        <div class="modal">
+          <h3>按分率の変更 - ${Adapt.escapeHTML(partnerId)}</h3>
+          <p style="font-size:12px;color:#666;margin:0 0 12px 0;">${Adapt.escapeHTML(companyName || '')}</p>
+          <div style="padding:8px 10px;background:#f9fafb;border-radius:4px;margin-bottom:12px;font-size:13px;">
+            現在の按分率：<strong>${currentPct != null ? currentPct + '%' : '未設定'}</strong>
+          </div>
+          <div id="shareEditMsg"></div>
+          <form id="shareEditForm" class="stack" novalidate>
+            <div class="field">
+              <label for="newPct">新しい按分率（%）<span class="req">*</span></label>
+              <input id="newPct" type="number" step="0.1" min="0" max="100" required />
+            </div>
+            <div class="field">
+              <label for="effFrom">発効日 <span class="req">*</span></label>
+              <input id="effFrom" type="date" value="${firstOfNextMonthYMD()}" required />
+              <p style="font-size:11px;color:#666;margin:4px 0 0 0;">
+                月初日（1日）を推奨。日割り計算は行われません。
+              </p>
+            </div>
+            <div class="field">
+              <label for="shareNote">変更理由・備考</label>
+              <textarea id="shareNote" rows="2" maxlength="500" placeholder="例: 契約更新に伴う引き上げ"></textarea>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn" id="shareEditCancel">キャンセル</button>
+              <button type="submit" class="btn btn--primary" id="shareEditSubmit">変更を保存</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    document.getElementById('shareBackdrop').addEventListener('click', e => {
+      if (e.target.id === 'shareBackdrop') closeShareModal();
+    });
+    document.getElementById('shareEditCancel').addEventListener('click', closeShareModal);
+    document.getElementById('shareEditForm').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const msgEl = document.getElementById('shareEditMsg');
+      const submitBtn = document.getElementById('shareEditSubmit');
+      msgEl.innerHTML = '';
+
+      const pct = Number(document.getElementById('newPct').value);
+      const effFrom = document.getElementById('effFrom').value;
+      const note = document.getElementById('shareNote').value;
+      if (Number.isNaN(pct) || pct < 0 || pct > 100) {
+        msgEl.innerHTML = `<div class="msg msg--err">按分率は 0〜100 の数値を入力してください。</div>`;
+        return;
+      }
+      if (!effFrom) {
+        msgEl.innerHTML = `<div class="msg msg--err">発効日を入力してください。</div>`;
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = '保存中…';
+      try {
+        const r = await AdaptAPI.call(`/api/admin/partners/${partnerId}/share`, {
+          method: 'POST',
+          body: { pct, effective_from: effFrom, note }
+        });
+        let toastMsg = `按分率を ${r.pct}% に変更しました（発効: ${r.effective_from}）`;
+        if (r.retroactive_adjustments && r.retroactive_adjustments.length) {
+          toastMsg += `／遡及再計算 ${r.retroactive_adjustments.length} 件`;
+        }
+        if (r.paid_entries_protected) {
+          toastMsg += `／支払済 ${r.paid_entries_protected} 件は保護`;
+        }
+        Adapt.toast(toastMsg, 'success');
+        closeShareModal();
+        loadPartners();
+      } catch (e) {
+        const errMap = {
+          invalid_pct: '按分率が不正です（0〜100・小数点第一位まで）',
+          invalid_date: '発効日が不正です',
+          note_too_long: '備考は500文字以内で入力してください',
+          effective_before_contract: '発効日は契約開始日以降を指定してください',
+          not_super: '対象は総代理店のみです',
+          partner_not_found: '対象が見つかりません'
+        };
+        msgEl.innerHTML = `<div class="msg msg--err">${errMap[e.message] || 'エラー: ' + e.message}</div>`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = '変更を保存';
+      }
+    });
+  }
+
+  async function openShareHistoryModal({ partnerId, companyName }) {
+    const wrap = getModalWrap();
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="shareBackdrop">
+        <div class="modal">
+          <h3>按分率の変更履歴 - ${Adapt.escapeHTML(partnerId)}</h3>
+          <p style="font-size:12px;color:#666;margin:0 0 12px 0;">${Adapt.escapeHTML(companyName || '')}</p>
+          <div id="shareHistContent"><p class="muted">読み込み中…</p></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn--primary" id="shareHistClose">閉じる</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('shareBackdrop').addEventListener('click', e => {
+      if (e.target.id === 'shareBackdrop') closeShareModal();
+    });
+    document.getElementById('shareHistClose').addEventListener('click', closeShareModal);
+    try {
+      const r = await AdaptAPI.call(`/api/admin/partners/${partnerId}/share-history`);
+      const list = r.history || [];
+      const c = document.getElementById('shareHistContent');
+      if (list.length === 0) {
+        c.innerHTML = `<p class="muted">履歴はまだありません。</p>`;
+        return;
+      }
+      c.innerHTML = list.map((h, i) => {
+        const active = (!h.effective_to && h.effective_from <= todayYMD());
+        const future = h.effective_from > todayYMD();
+        const label = active ? '現在' : (future ? '未来発効' : '過去');
+        const tagClass = active ? 'status-active' : (future ? 'status-pending' : 'status-expired');
+        return `
+          <div style="border:1px solid #e3e3e0;border-radius:6px;padding:10px 12px;margin-bottom:8px;${active ? 'background:#fff8e1;' : ''}">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+              <div><span class="status-badge ${tagClass}">${label}</span> <strong style="font-size:16px;margin-left:6px;">${h.pct}%</strong></div>
+              <div class="mono" style="font-size:11px;color:#666;">#${h.id}</div>
+            </div>
+            <div class="mono" style="font-size:12px;color:#444;margin-top:4px;">
+              発効: ${h.effective_from}${h.effective_to ? ' 〜 ' + h.effective_to : ' 〜 現在有効'}
+            </div>
+            <div style="font-size:11px;color:#666;margin-top:2px;">
+              設定: ${Adapt.escapeHTML(h.set_by || '-')} / ${formatDate(h.created_at)}
+            </div>
+            ${h.note ? `<div style="font-size:12px;margin-top:4px;padding:4px 8px;background:#f9fafb;border-radius:3px;">${Adapt.escapeHTML(h.note)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      document.getElementById('shareHistContent').innerHTML =
+        `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
   }
 })();
 </script>
