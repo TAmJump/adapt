@@ -6,6 +6,21 @@
 <meta name="robots" content="noindex" />
 <title>アカウント設定｜Adavoo Partner</title>
 <link rel="stylesheet" href="assets/style.css?v=20260421" />
+<style>
+  .info-grid { display: grid; grid-template-columns: 200px 1fr; gap: 8px 12px; font-size: 13px; }
+  .info-grid > .lbl { color: #666; padding: 4px 0; }
+  .info-grid > .val { color: #0a0e1a; padding: 4px 0; font-variant-numeric: tabular-nums; }
+  .info-grid > .val.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+  .contract-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  }
+  .contract-badge.active { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .contract-badge.warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .contract-badge.expired { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+  .edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .edit-note { font-size: 11px; color: #666; margin-top: 8px; }
+</style>
 </head>
 <body>
 <div id="adapt-header"></div>
@@ -29,109 +44,354 @@
   if (!r) return;
 
   Adapt.renderPartnerHeader({ active: 'account' });
-  Adapt.bindPasswordToggles();
 
-  const p = r.partner;
-  const isSuper = p.type === 'super';
-
+  const isSuper = r.partner.type === 'super';
   document.getElementById('pageSubtitle').textContent =
-    (isSuper ? '総代理店' : '代理店') + ' / ' + p.company_name;
+    (isSuper ? '総代理店' : '代理店') + ' / ' + r.partner.company_name;
 
-  const body = document.getElementById('bodyContent');
-  body.innerHTML = `
-    <section class="card">
-      <h2 class="panel-title">アカウント情報</h2>
-      <table>
-        <tr><th style="width:180px">${isSuper ? '総代理店コード' : '代理店コード'}</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
-        <tr><th>種別</th><td>${isSuper ? '総代理店' : '代理店'}</td></tr>
-        <tr><th>会社名</th><td>${Adapt.escapeHTML(p.company_name)}</td></tr>
-        <tr><th>ログインID</th><td class="mono">${Adapt.escapeHTML(p.login_id)}</td></tr>
-        <tr><th>メール</th><td>${Adapt.escapeHTML(p.email || '-')}</td></tr>
-        <tr><th>電話</th><td>${Adapt.escapeHTML(p.phone || '-')}</td></tr>
-      </table>
-      <p class="muted" style="font-size:12px; margin:14px 0 0 0;">
-        会社名・メール・電話の変更はタムジ社（info@tamjump.com）までご連絡ください。
-      </p>
-    </section>
+  let me;
+  try {
+    const meRes = await PartnerAPI.call('/api/partner/me');
+    me = meRes.partner;
+  } catch (e) {
+    document.getElementById('bodyContent').innerHTML =
+      `<div class="msg msg--err">アカウント情報の取得に失敗しました: ${Adapt.escapeHTML(e.message)}</div>`;
+    return;
+  }
 
-    <section class="card">
-      <h2 class="panel-title">パスワード変更</h2>
-      <div id="pwMsg"></div>
-      <form id="pwForm" class="stack" autocomplete="on" novalidate style="max-width:440px;">
-        <div class="field">
-          <label for="oldPw">現在のパスワード</label>
-          <div class="pw-wrap">
-            <input id="oldPw" type="password" required autocomplete="current-password" />
-            <button type="button" class="pw-toggle" data-pw="oldPw">表示</button>
-          </div>
-        </div>
-        <div class="field">
-          <label for="newPw">新しいパスワード</label>
-          <div class="pw-wrap">
-            <input id="newPw" type="password" required minlength="8" autocomplete="new-password" />
-            <button type="button" class="pw-toggle" data-pw="newPw">表示</button>
-          </div>
-          <div class="hint">8文字以上</div>
-        </div>
-        <div class="field">
-          <label for="newPw2">新しいパスワード（確認）</label>
-          <div class="pw-wrap">
-            <input id="newPw2" type="password" required minlength="8" autocomplete="new-password" />
-            <button type="button" class="pw-toggle" data-pw="newPw2">表示</button>
-          </div>
-        </div>
-        <button class="btn btn--primary" id="pwSubmitBtn" type="submit">パスワードを変更する</button>
-      </form>
-      <p class="muted" style="font-size:12px; margin:14px 0 0 0;">
-        変更するとこの端末以外の全ログインセッションは失効します。<br>
-        パスワードを忘れた場合は、一度ログアウトして<a href="partner-forgot-password.html">パスワード再設定</a>をご利用ください。
-      </p>
-    </section>
-  `;
+  render(me);
 
-  Adapt.bindPasswordToggles();
-
-  document.getElementById('pwForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById('pwMsg');
-    const btn = document.getElementById('pwSubmitBtn');
-    msg.innerHTML = '';
-    const oldPw = document.getElementById('oldPw').value;
-    const pw1 = document.getElementById('newPw').value;
-    const pw2 = document.getElementById('newPw2').value;
-    if (pw1 !== pw2) {
-      msg.innerHTML = '<div class="msg msg--err">新しいパスワードが一致しません。</div>';
-      return;
+  function render(p) {
+    const body = document.getElementById('bodyContent');
+    const startYMD = p.contract_start_at ? formatDate(p.contract_start_at) : '-';
+    const endYMD = p.contract_end_at ? formatDate(p.contract_end_at) : '-';
+    const daysLeft = p.contract_end_at ? daysUntil(p.contract_end_at) : null;
+    let contractBadge = '<span class="contract-badge active">稼働中</span>';
+    let contractNote = '';
+    if (daysLeft !== null) {
+      if (daysLeft < 0) {
+        contractBadge = '<span class="contract-badge expired">契約終了</span>';
+        contractNote = '<p class="edit-note">契約は既に終了しています。継続をご希望の場合はタムジ社までご連絡ください。</p>';
+      } else if (daysLeft <= 60) {
+        contractBadge = `<span class="contract-badge warn">終了 ${daysLeft}日前</span>`;
+        contractNote = '<p class="edit-note">契約終了まで60日を切りました。継続をご希望の場合はタムジ社（info@tamjump.com）までご連絡ください。</p>';
+      }
     }
-    if (pw1 === oldPw) {
-      msg.innerHTML = '<div class="msg msg--err">新しいパスワードは現在のものと異なるものにしてください。</div>';
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = '変更中…';
-    try {
-      await PartnerAPI.call('/api/partner/change-password', {
-        method: 'POST',
-        body: { old_password: oldPw, new_password: pw1 }
-      });
-      msg.innerHTML = '<div class="msg msg--ok">パスワードを変更しました。他の端末のセッションは失効しました。</div>';
-      document.getElementById('pwForm').reset();
-    } catch (e) {
-      const map = {
-        missing_fields:     '入力を確認してください。',
-        password_too_short: '新しいパスワードは8文字以上にしてください。',
-        wrong_password:     '現在のパスワードが違います。',
-        unauthorized:       'セッションが切れています。再ログインしてください。',
-        invalid_token:      'セッションが切れています。再ログインしてください。',
-        expired:            'セッションの有効期限が切れています。再ログインしてください。',
-        partner_suspended:  'この代理店アカウントは利用停止中です。'
+
+    const bank = p.bank_info || {};
+
+    body.innerHTML = `
+      <section class="card">
+        <h2 class="panel-title">アカウント情報</h2>
+        <div class="info-grid">
+          <div class="lbl">${isSuper ? '総代理店コード' : '代理店コード'}</div>
+          <div class="val mono">${Adapt.escapeHTML(p.code)}</div>
+          <div class="lbl">種別</div>
+          <div class="val">${isSuper ? '総代理店' : '代理店'}</div>
+          <div class="lbl">会社名</div>
+          <div class="val">${Adapt.escapeHTML(p.company_name)}</div>
+          <div class="lbl">ログインID</div>
+          <div class="val mono">${Adapt.escapeHTML(p.login_id)}</div>
+          ${p.parent ? `
+          <div class="lbl">ご担当の総代理店</div>
+          <div class="val"><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</div>
+          ` : ''}
+        </div>
+        <p class="edit-note">
+          会社名・ログインID・種別の変更はタムジ社（<a href="mailto:info@tamjump.com">info@tamjump.com</a>）までご連絡ください。
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 class="panel-title">連絡先</h2>
+        <div id="contactView" style="display:block;">
+          <div class="info-grid">
+            <div class="lbl">メール</div>
+            <div class="val">${Adapt.escapeHTML(p.email || '-')}</div>
+            <div class="lbl">電話</div>
+            <div class="val">${Adapt.escapeHTML(p.phone || '-')}</div>
+          </div>
+          <div class="edit-actions">
+            <button class="btn btn--sm" id="contactEditBtn" type="button">編集</button>
+          </div>
+        </div>
+        <form id="contactEditForm" class="stack" novalidate style="display:none;max-width:440px;">
+          <div id="contactMsg"></div>
+          <div class="field">
+            <label for="fEmail">メール</label>
+            <input id="fEmail" type="email" maxlength="200" value="${Adapt.escapeHTML(p.email || '')}" />
+          </div>
+          <div class="field">
+            <label for="fPhone">電話</label>
+            <input id="fPhone" type="tel" maxlength="40" value="${Adapt.escapeHTML(p.phone || '')}" />
+            <div class="hint">数字・ハイフン・+・()のみ</div>
+          </div>
+          <div class="edit-actions">
+            <button class="btn" id="contactCancelBtn" type="button">キャンセル</button>
+            <button class="btn btn--primary" id="contactSubmitBtn" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2 class="panel-title">振込先</h2>
+        <div id="bankView" style="display:block;">
+          <div class="info-grid">
+            <div class="lbl">金融機関</div>
+            <div class="val">${Adapt.escapeHTML(bank.bank_name || '-')}</div>
+            <div class="lbl">支店名</div>
+            <div class="val">${Adapt.escapeHTML(bank.branch_name || '-')}${bank.branch_code ? `（${Adapt.escapeHTML(bank.branch_code)}）` : ''}</div>
+            <div class="lbl">口座種別</div>
+            <div class="val">${Adapt.escapeHTML(formatAccountType(bank.account_type))}</div>
+            <div class="lbl">口座番号</div>
+            <div class="val mono">${Adapt.escapeHTML(bank.account_number || '-')}</div>
+            <div class="lbl">口座名義</div>
+            <div class="val">${Adapt.escapeHTML(bank.account_holder || '-')}</div>
+          </div>
+          <div class="edit-actions">
+            <button class="btn btn--sm" id="bankEditBtn" type="button">編集</button>
+          </div>
+          <p class="edit-note">${isSuper ? '月次の按分支払いはこの振込先へ行われます。変更後は次回支払いから反映されます。' : 'パートナー代理店の場合、振込先はご担当の総代理店が参照します。'}</p>
+        </div>
+        <form id="bankEditForm" class="stack" novalidate style="display:none;max-width:520px;">
+          <div id="bankMsg"></div>
+          <div class="field">
+            <label for="fBankName">金融機関</label>
+            <input id="fBankName" type="text" maxlength="100" value="${Adapt.escapeHTML(bank.bank_name || '')}" placeholder="例: みずほ銀行" />
+          </div>
+          <div class="field">
+            <label for="fBranchName">支店名</label>
+            <input id="fBranchName" type="text" maxlength="100" value="${Adapt.escapeHTML(bank.branch_name || '')}" placeholder="例: 東京営業部" />
+          </div>
+          <div class="field">
+            <label for="fBranchCode">支店コード（3桁）</label>
+            <input id="fBranchCode" type="text" maxlength="100" value="${Adapt.escapeHTML(bank.branch_code || '')}" placeholder="例: 001" />
+          </div>
+          <div class="field">
+            <label for="fAccountType">口座種別</label>
+            <select id="fAccountType">
+              <option value=""${!bank.account_type ? ' selected' : ''}>選択してください</option>
+              <option value="普通"${bank.account_type === '普通' || bank.account_type === 'ordinary' ? ' selected' : ''}>普通</option>
+              <option value="当座"${bank.account_type === '当座' || bank.account_type === 'checking' ? ' selected' : ''}>当座</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fAccountNumber">口座番号（4〜10桁）</label>
+            <input id="fAccountNumber" type="text" maxlength="10" value="${Adapt.escapeHTML(bank.account_number || '')}" pattern="\\d{4,10}" />
+          </div>
+          <div class="field">
+            <label for="fAccountHolder">口座名義（カナ推奨）</label>
+            <input id="fAccountHolder" type="text" maxlength="100" value="${Adapt.escapeHTML(bank.account_holder || '')}" placeholder="例: カ）タムジタロウ" />
+          </div>
+          <div class="edit-actions">
+            <button class="btn" id="bankCancelBtn" type="button">キャンセル</button>
+            <button class="btn btn--primary" id="bankSubmitBtn" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2 class="panel-title">契約情報</h2>
+        <div class="info-grid">
+          <div class="lbl">状態</div>
+          <div class="val">${contractBadge}</div>
+          <div class="lbl">契約期間</div>
+          <div class="val mono">${startYMD} 〜 ${endYMD}</div>
+          ${isSuper && p.revenue_share_pct != null ? `
+          <div class="lbl">按分率（タムジ→自社）</div>
+          <div class="val"><strong>${p.revenue_share_pct}%</strong></div>
+          ` : ''}
+        </div>
+        ${contractNote}
+      </section>
+
+      <section class="card">
+        <h2 class="panel-title">パスワード変更</h2>
+        <div id="pwMsg"></div>
+        <form id="pwForm" class="stack" autocomplete="on" novalidate style="max-width:440px;">
+          <div class="field">
+            <label for="oldPw">現在のパスワード</label>
+            <div class="pw-wrap">
+              <input id="oldPw" type="password" required autocomplete="current-password" />
+              <button type="button" class="pw-toggle" data-pw="oldPw">表示</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="newPw">新しいパスワード</label>
+            <div class="pw-wrap">
+              <input id="newPw" type="password" required minlength="8" autocomplete="new-password" />
+              <button type="button" class="pw-toggle" data-pw="newPw">表示</button>
+            </div>
+            <div class="hint">8文字以上</div>
+          </div>
+          <div class="field">
+            <label for="newPw2">新しいパスワード（確認）</label>
+            <div class="pw-wrap">
+              <input id="newPw2" type="password" required minlength="8" autocomplete="new-password" />
+              <button type="button" class="pw-toggle" data-pw="newPw2">表示</button>
+            </div>
+          </div>
+          <button class="btn btn--primary" id="pwSubmitBtn" type="submit">パスワードを変更する</button>
+        </form>
+        <p class="edit-note">
+          変更するとこの端末以外の全ログインセッションは失効します。<br>
+          パスワードを忘れた場合は、一度ログアウトして<a href="partner-forgot-password.html">パスワード再設定</a>をご利用ください。
+        </p>
+      </section>
+    `;
+
+    Adapt.bindPasswordToggles();
+    bindEditHandlers(p);
+    bindPwFormHandler();
+  }
+
+  function bindEditHandlers(p) {
+    document.getElementById('contactEditBtn').addEventListener('click', () => {
+      document.getElementById('contactView').style.display = 'none';
+      document.getElementById('contactEditForm').style.display = 'block';
+    });
+    document.getElementById('contactCancelBtn').addEventListener('click', () => {
+      document.getElementById('contactView').style.display = 'block';
+      document.getElementById('contactEditForm').style.display = 'none';
+      document.getElementById('contactMsg').innerHTML = '';
+    });
+    document.getElementById('contactEditForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById('contactMsg');
+      const btn = document.getElementById('contactSubmitBtn');
+      msgEl.innerHTML = '';
+      const email = document.getElementById('fEmail').value.trim();
+      const phone = document.getElementById('fPhone').value.trim();
+      btn.disabled = true;
+      btn.textContent = '保存中…';
+      try {
+        await PartnerAPI.call('/api/partner/me', {
+          method: 'PUT',
+          body: { email, phone }
+        });
+        Adapt.toast('連絡先を更新しました', 'success');
+        const fresh = await PartnerAPI.call('/api/partner/me');
+        render(fresh.partner);
+      } catch (e) {
+        const map = {
+          invalid_email: 'メールアドレスの形式が正しくありません',
+          invalid_phone: '電話番号の形式が正しくありません（数字・ハイフン・+・()のみ）',
+          no_changes: '変更がありません'
+        };
+        msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = '保存';
+      }
+    });
+
+    document.getElementById('bankEditBtn').addEventListener('click', () => {
+      document.getElementById('bankView').style.display = 'none';
+      document.getElementById('bankEditForm').style.display = 'block';
+    });
+    document.getElementById('bankCancelBtn').addEventListener('click', () => {
+      document.getElementById('bankView').style.display = 'block';
+      document.getElementById('bankEditForm').style.display = 'none';
+      document.getElementById('bankMsg').innerHTML = '';
+    });
+    document.getElementById('bankEditForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById('bankMsg');
+      const btn = document.getElementById('bankSubmitBtn');
+      msgEl.innerHTML = '';
+      const bank_info = {
+        bank_name: document.getElementById('fBankName').value.trim(),
+        branch_name: document.getElementById('fBranchName').value.trim(),
+        branch_code: document.getElementById('fBranchCode').value.trim(),
+        account_type: document.getElementById('fAccountType').value,
+        account_number: document.getElementById('fAccountNumber').value.trim(),
+        account_holder: document.getElementById('fAccountHolder').value.trim()
       };
-      msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'パスワードを変更する';
-    }
-  });
+      Object.keys(bank_info).forEach(k => { if (!bank_info[k]) delete bank_info[k]; });
+      btn.disabled = true;
+      btn.textContent = '保存中…';
+      try {
+        await PartnerAPI.call('/api/partner/me', {
+          method: 'PUT',
+          body: { bank_info }
+        });
+        Adapt.toast('振込先を更新しました', 'success');
+        const fresh = await PartnerAPI.call('/api/partner/me');
+        render(fresh.partner);
+      } catch (e) {
+        const errMap = {
+          invalid_bank_info: '入力値が不正です（口座番号は数字4〜10桁、各項目100文字以内）',
+          no_changes: '変更がありません'
+        };
+        msgEl.innerHTML = `<div class="msg msg--err">${errMap[e.message] || 'エラー: ' + e.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = '保存';
+      }
+    });
+  }
+
+  function bindPwFormHandler() {
+    document.getElementById('pwForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('pwMsg');
+      const btn = document.getElementById('pwSubmitBtn');
+      msg.innerHTML = '';
+      const oldPw = document.getElementById('oldPw').value;
+      const pw1 = document.getElementById('newPw').value;
+      const pw2 = document.getElementById('newPw2').value;
+      if (pw1 !== pw2) {
+        msg.innerHTML = '<div class="msg msg--err">新しいパスワードが一致しません。</div>';
+        return;
+      }
+      if (pw1 === oldPw) {
+        msg.innerHTML = '<div class="msg msg--err">新しいパスワードは現在のものと異なるものにしてください。</div>';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '変更中…';
+      try {
+        await PartnerAPI.call('/api/partner/change-password', {
+          method: 'POST',
+          body: { old_password: oldPw, new_password: pw1 }
+        });
+        msg.innerHTML = '<div class="msg msg--ok">パスワードを変更しました。他の端末のセッションは失効しました。</div>';
+        document.getElementById('pwForm').reset();
+      } catch (e) {
+        const map = {
+          missing_fields: '入力を確認してください。',
+          password_too_short: '新しいパスワードは8文字以上にしてください。',
+          wrong_password: '現在のパスワードが違います。',
+          unauthorized: 'セッションが切れています。再ログインしてください。',
+          invalid_token: 'セッションが切れています。再ログインしてください。',
+          expired: 'セッションの有効期限が切れています。再ログインしてください。',
+          partner_suspended: 'この代理店アカウントは利用停止中です。'
+        };
+        msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'パスワードを変更する';
+      }
+    });
+  }
+
+  function formatDate(s) {
+    if (!s) return '-';
+    const d = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+  function daysUntil(s) {
+    if (!s) return null;
+    const d = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
+    if (isNaN(d)) return null;
+    const now = new Date();
+    return Math.ceil((d.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  }
+  function formatAccountType(t) {
+    if (!t) return '-';
+    if (t === 'ordinary') return '普通';
+    if (t === 'checking') return '当座';
+    return t;
+  }
 })();
 </script>
 </body>

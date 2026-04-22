@@ -1378,6 +1378,12 @@ ${resetUrl}
             "SELECT partner_id, code, company_name FROM partners WHERE partner_id = ?"
           ).bind(p.parent_partner_id).first();
         }
+        // bank_info_json の個別取得（requirePartnerAuth では引かない）
+        const bankRow = await db.prepare(
+          "SELECT bank_info_json FROM partners WHERE partner_id = ?"
+        ).bind(p.partner_id).first();
+        let bankInfo = null;
+        try { bankInfo = bankRow?.bank_info_json ? JSON.parse(bankRow.bank_info_json) : null; } catch {}
         return json({
           ok: true,
           partner: {
@@ -1393,7 +1399,107 @@ ${resetUrl}
             contract_start_at: p.contract_start_at,
             contract_end_at: p.contract_end_at,
             revenue_share_pct: p.revenue_share_pct,
-            status: p.status
+            status: p.status,
+            bank_info: bankInfo
+          }
+        }, 200, cors);
+      }
+
+      // Phase 4-3c: 代理店自身による自己情報の更新（email / phone / bank_info）
+      // 会社名・種別・契約期間・按分率・login_id は編集不可（タムジ管理者のみ）
+      if (path === '/api/partner/me' && method === 'PUT') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+
+        const b = (await request.json()) || {};
+        const { email, phone, bank_info } = b;
+
+        // バリデーション
+        if (email !== undefined && email !== null && email !== '') {
+          if (typeof email !== 'string' || email.length > 200) return json({ error: 'invalid_email' }, 400, cors);
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'invalid_email' }, 400, cors);
+        }
+        if (phone !== undefined && phone !== null && phone !== '') {
+          if (typeof phone !== 'string' || phone.length > 40) return json({ error: 'invalid_phone' }, 400, cors);
+          // 緩めのバリデーション：数字・ハイフン・プラス・括弧・スペース
+          if (!/^[0-9+\-\s()]+$/.test(phone)) return json({ error: 'invalid_phone' }, 400, cors);
+        }
+        if (bank_info !== undefined && bank_info !== null) {
+          if (typeof bank_info !== 'object') return json({ error: 'invalid_bank_info' }, 400, cors);
+          // 許可フィールド限定（不要なキーは捨てる）
+          const allowed = ['bank_name', 'branch_name', 'branch_code', 'account_type', 'account_number', 'account_holder'];
+          const cleaned = {};
+          for (const k of allowed) {
+            if (bank_info[k] !== undefined && bank_info[k] !== null) {
+              if (typeof bank_info[k] !== 'string' || bank_info[k].length > 100) {
+                return json({ error: 'invalid_bank_info', field: k }, 400, cors);
+              }
+              cleaned[k] = bank_info[k];
+            }
+          }
+          // account_type は 'ordinary' | 'checking' | '普通' | '当座' 受け入れ
+          if (cleaned.account_type && !['ordinary', 'checking', '普通', '当座', ''].includes(cleaned.account_type)) {
+            return json({ error: 'invalid_bank_info', field: 'account_type' }, 400, cors);
+          }
+          // account_number は数字のみ 4〜10桁（日本の一般的な口座番号）
+          if (cleaned.account_number && !/^\d{4,10}$/.test(cleaned.account_number)) {
+            return json({ error: 'invalid_bank_info', field: 'account_number' }, 400, cors);
+          }
+          b.bank_info_cleaned = cleaned;
+        }
+
+        // 変更された項目だけを UPDATE
+        const sets = [];
+        const binds = [];
+        const changes = {};
+        if (email !== undefined) {
+          sets.push('email = ?');
+          binds.push(email || null);
+          if (email !== p.email) changes.email = { old: p.email, new: email || null };
+        }
+        if (phone !== undefined) {
+          sets.push('phone = ?');
+          binds.push(phone || null);
+          if (phone !== p.phone) changes.phone = { old: p.phone, new: phone || null };
+        }
+        if (bank_info !== undefined) {
+          const bankJson = b.bank_info_cleaned ? JSON.stringify(b.bank_info_cleaned) : null;
+          sets.push('bank_info_json = ?');
+          binds.push(bankJson);
+          changes.bank_info = { new: b.bank_info_cleaned || null };
+        }
+
+        if (sets.length === 0) {
+          return json({ error: 'no_changes' }, 400, cors);
+        }
+
+        sets.push("updated_at = datetime('now')");
+        binds.push(p.partner_id);
+        await db.prepare(
+          `UPDATE partners SET ${sets.join(', ')} WHERE partner_id = ?`
+        ).bind(...binds).run();
+
+        await audit(db, 'partner_self_updated', null, p.login_id, {
+          partner_id: p.partner_id,
+          changes: changes
+        }, request);
+
+        // 更新後の partner を取得して返す
+        const updated = await db.prepare(
+          "SELECT email, phone, bank_info_json FROM partners WHERE partner_id = ?"
+        ).bind(p.partner_id).first();
+        let bankInfoUpdated = null;
+        try { bankInfoUpdated = updated?.bank_info_json ? JSON.parse(updated.bank_info_json) : null; } catch {}
+
+        return json({
+          ok: true,
+          updated_fields: Object.keys(changes),
+          partner: {
+            partner_id: p.partner_id,
+            email: updated?.email || null,
+            phone: updated?.phone || null,
+            bank_info: bankInfoUpdated
           }
         }, 200, cors);
       }
