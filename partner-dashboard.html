@@ -90,25 +90,25 @@
       <table id="selfTbl"></table>
     </section>
 
-    <!-- 配下代理店（総代理店のみ表示） -->
+    <!-- パートナー代理店（総代理店のみ表示） -->
     <section class="card" id="subAgentsCard" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h2 class="panel-title" style="margin:0;">配下代理店</h2>
-        <button class="btn btn--primary btn--sm" id="addAgentBtn" type="button">＋ 配下代理店を登録</button>
+        <h2 class="panel-title" style="margin:0;">パートナー代理店</h2>
+        <button class="btn btn--primary btn--sm" id="addAgentBtn" type="button">＋ パートナー代理店を登録</button>
       </div>
       <div id="subAgentsContent"></div>
     </section>
 
-    <!-- 配下エンドユーザー -->
+    <!-- ご紹介先企業 -->
     <section class="card">
-      <h2 class="panel-title">配下エンドユーザー</h2>
+      <h2 class="panel-title">ご紹介先企業</h2>
       <div id="customersContent"></div>
     </section>
 
   </div>
 </main>
 
-<!-- 配下代理店登録モーダル -->
+<!-- パートナー代理店登録モーダル -->
 <div id="modalWrap" style="display:none;"></div>
 
 <script src="assets/common.js?v=20260421"></script>
@@ -135,7 +135,7 @@
     <tr><th>電話</th><td>${Adapt.escapeHTML(p.phone || '-')}</td></tr>
     <tr><th>契約開始日</th><td class="mono">${formatDate(p.contract_start_at)}</td></tr>
     <tr><th>契約終了予定日</th><td class="mono">${formatDate(p.contract_end_at)}</td></tr>
-    ${p.parent ? `<tr><th>所属総代理店</th><td><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</td></tr>` : ''}
+    ${p.parent ? `<tr><th>ご担当の総代理店</th><td><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</td></tr>` : ''}
     ${isSuper && p.revenue_share_pct != null ? `<tr><th>按分率（タムジ→自社）</th><td class="mono">${p.revenue_share_pct}%</td></tr>` : ''}
   `;
 
@@ -148,7 +148,7 @@
     const metrics = [];
     metrics.push(`
       <div class="metric">
-        <div class="metric__label">配下エンドユーザー</div>
+        <div class="metric__label">ご紹介先企業</div>
         <div class="metric__value">${sm.customer_count}<span class="metric__unit">社</span></div>
       </div>`);
     metrics.push(`
@@ -159,7 +159,7 @@
     if (isSuper && sm.sub_agent_count != null) {
       metrics.push(`
         <div class="metric">
-          <div class="metric__label">配下代理店</div>
+          <div class="metric__label">パートナー代理店</div>
           <div class="metric__value">${sm.sub_agent_count}<span class="metric__unit">社</span></div>
         </div>`);
     }
@@ -181,7 +181,7 @@
     summaryEl.innerHTML = `<div class="msg msg--err">サマリー取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
   }
 
-  // --- 配下代理店一覧（総代理店のみ） ---
+  // --- パートナー代理店一覧（総代理店のみ） ---
   if (isSuper) {
     document.getElementById('subAgentsCard').style.display = '';
     loadSubAgents();
@@ -195,14 +195,14 @@
       const r = await PartnerAPI.call('/api/partner/sub-agents');
       const list = r.sub_agents || [];
       if (list.length === 0) {
-        el.innerHTML = `<p class="muted">まだ配下代理店が登録されていません。右上の「＋ 配下代理店を登録」から追加してください。</p>`;
+        el.innerHTML = `<p class="muted">まだパートナー代理店が登録されていません。右上の「＋ パートナー代理店を登録」から追加してください。</p>`;
         return;
       }
       el.innerHTML = `
         <table>
           <thead><tr>
             <th>コード</th><th>会社名</th><th>ログインID</th><th>メール</th>
-            <th>配下ユーザー</th><th>契約終了</th><th>状態</th>
+            <th>ご紹介先企業</th><th>契約終了</th><th>状態</th>
           </tr></thead>
           <tbody>
             ${list.map(a => `
@@ -224,7 +224,7 @@
     }
   }
 
-  // --- 配下エンドユーザー一覧 ---
+  // --- ご紹介先企業一覧 ---
   (async function loadCustomers() {
     const el = document.getElementById('customersContent');
     el.innerHTML = '<p class="muted">読み込み中…</p>';
@@ -232,14 +232,14 @@
       const r = await PartnerAPI.call('/api/partner/customers');
       const list = r.customers || [];
       if (list.length === 0) {
-        el.innerHTML = `<p class="muted">配下エンドユーザーはまだいません。代理店コードを案内して登録してもらってください。</p>`;
+        el.innerHTML = `<p class="muted">ご紹介先企業はまだいません。代理店コードを案内して登録してもらってください。</p>`;
         return;
       }
       el.innerHTML = `
         <table>
           <thead><tr>
             <th>会社ID</th><th>会社名</th><th>メール</th>
-            <th>紐付けコード</th><th>スタッフ数</th><th>有料契約</th><th>登録日</th>
+            <th>パートナーコード</th><th>スタッフ数</th><th>有料契約</th><th>登録日</th>
           </tr></thead>
           <tbody>
             ${list.map(c => `
@@ -261,14 +261,14 @@
     }
   })();
 
-  // --- 配下代理店登録モーダル ---
+  // --- パートナー代理店登録モーダル ---
   function openAddAgentModal() {
     const wrap = document.getElementById('modalWrap');
     wrap.style.display = '';
     wrap.innerHTML = `
       <div class="modal-backdrop" id="modalBackdrop">
         <div class="modal" id="modalBox">
-          <h3>配下代理店を登録</h3>
+          <h3>パートナー代理店を登録</h3>
           <p class="muted" style="font-size:12px; margin:0 0 12px 0;">
             登録後、ここに表示される<strong>代理店コード・ログインID・初期パスワード</strong>を相手先にお伝えください。
           </p>
@@ -348,7 +348,7 @@
         password_too_short: 'パスワードは8文字以上にしてください。',
         invalid_login_id: 'ログインIDの形式が正しくありません。',
         invalid_email: 'メールアドレスの形式が正しくありません。',
-        forbidden_super_only: '配下代理店の登録は総代理店のみ可能です。',
+        forbidden_super_only: 'パートナー代理店の登録は総代理店のみ可能です。',
         missing_fields: '必須項目を入力してください。'
       };
       msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
@@ -363,7 +363,7 @@
       <div class="modal-backdrop">
         <div class="modal">
           <h3>登録完了</h3>
-          <p>配下代理店を登録しました。以下の情報を相手先にお伝えください。</p>
+          <p>パートナー代理店を登録しました。以下の情報を相手先にお伝えください。</p>
           <div class="credentials-box">
             <div>代理店コード: <span class="mono">${Adapt.escapeHTML(agent.code)}</span></div>
             <div>ログインID: <span class="mono">${Adapt.escapeHTML(agent.login_id)}</span></div>
