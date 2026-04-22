@@ -198,6 +198,7 @@ function renderPartnerHeader({ active = '' } = {}) {
 
   const navInner = `
     <a href="partner-dashboard.html" class="${active === 'dashboard' ? 'active' : ''}">ダッシュボード</a>
+    <a href="partner-notifications.html" class="${active === 'notifications' ? 'active' : ''}" id="notifBellLink">お知らせ<span id="notifBadge" style="display:none;background:#c4432b;color:#fff;border-radius:100px;padding:1px 7px;font-size:10px;margin-left:4px;">0</span></a>
     <a href="partner-account.html" class="${active === 'account' ? 'active' : ''}">アカウント</a>
     <button id="partnerLogoutBtn" type="button">ログアウト</button>
   `;
@@ -247,6 +248,20 @@ function renderPartnerHeader({ active = '' } = {}) {
     PartnerAPI.clear();
     location.href = 'partner-login.html';
   });
+
+  // 未読通知バッジを非同期で更新
+  (async () => {
+    try {
+      const res = await PartnerAPI.call('/api/partner/notifications/unread-count');
+      if (res && res.unread_count > 0) {
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+          badge.textContent = res.unread_count > 99 ? '99+' : res.unread_count;
+          badge.style.display = '';
+        }
+      }
+    } catch {}
+  })();
 }
 
 // パスワード表示トグル

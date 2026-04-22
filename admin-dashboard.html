@@ -89,6 +89,7 @@
         <button class="tab-btn active" data-tab="partners">代理店管理</button>
         <button class="tab-btn" data-tab="requests">契約申請 <span id="reqBadge" style="display:none;background:#c4432b;color:#fff;border-radius:100px;padding:1px 7px;font-size:10px;margin-left:4px;">0</span></button>
         <button class="tab-btn" data-tab="invitations">招待管理</button>
+        <button class="tab-btn" data-tab="notify">通知送信</button>
         <button class="tab-btn" data-tab="ledger">月次台帳</button>
         <button class="tab-btn" data-tab="revenue">売上推移</button>
       </div>
@@ -121,6 +122,68 @@
           </div>
         </div>
         <div id="invitationsContent"><p class="muted">読み込み中…</p></div>
+      </div>
+
+      <!-- 通知送信タブ（Phase 4-4） -->
+      <div id="tab-notify" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h2 class="panel-title" style="margin:0;">代理店への通知送信</h2>
+        </div>
+        <div class="stack">
+          <section style="border:1px solid #e3e3e0;border-radius:6px;padding:16px 18px;">
+            <h3 style="margin:0 0 12px 0;font-size:14px;">新しい通知を送信</h3>
+            <div id="notifyMsg"></div>
+            <form id="notifyForm" class="stack" novalidate style="max-width:640px;">
+              <div class="field">
+                <label for="ntScope">宛先 <span class="req">*</span></label>
+                <select id="ntScope">
+                  <option value="all_active">全稼働中（総代理店+代理店）</option>
+                  <option value="all_supers">全総代理店（active のみ）</option>
+                  <option value="individual">個別指定（partner_id を選ぶ）</option>
+                </select>
+              </div>
+              <div class="field" id="ntIndividualField" style="display:none;">
+                <label>個別宛先（複数チェック可）</label>
+                <div id="ntIndividualList" style="max-height:200px;overflow-y:auto;border:1px solid #e3e3e0;border-radius:4px;padding:8px;font-size:12px;">
+                  <span class="muted">読み込み中…</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="ntTitle">タイトル <span class="req">*</span></label>
+                <input id="ntTitle" type="text" maxlength="200" required />
+              </div>
+              <div class="field">
+                <label for="ntBody">本文 <span class="req">*</span></label>
+                <textarea id="ntBody" rows="6" maxlength="5000" required placeholder="改行も保持されます"></textarea>
+                <div class="hint">最大5000文字</div>
+              </div>
+              <div class="field">
+                <label for="ntActionUrl">アクションURL（任意）</label>
+                <input id="ntActionUrl" type="url" maxlength="500" placeholder="例: partner-account.html" />
+                <div class="hint">受信者が「詳細を見る」をクリックした際の遷移先</div>
+              </div>
+              <div class="field">
+                <label for="ntPriority">優先度</label>
+                <select id="ntPriority">
+                  <option value="normal" selected>通常</option>
+                  <option value="high">重要</option>
+                  <option value="low">低</option>
+                </select>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:8px;">
+                <button type="submit" class="btn btn--primary" id="ntSubmit">送信</button>
+              </div>
+            </form>
+          </section>
+
+          <section style="border:1px solid #e3e3e0;border-radius:6px;padding:16px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h3 style="margin:0;font-size:14px;">送信履歴</h3>
+              <button class="btn btn--ghost btn--sm" id="reloadNotifyBtn" type="button">再読み込み</button>
+            </div>
+            <div id="notifyHistoryContent"><p class="muted">読み込み中…</p></div>
+          </section>
+        </div>
       </div>
 
       <!-- 月次台帳タブ -->
@@ -171,17 +234,19 @@
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['partners','requests','invitations','ledger','revenue'].forEach(k => {
+      ['partners','requests','invitations','notify','ledger','revenue'].forEach(k => {
         document.getElementById('tab-' + k).style.display = (k === btn.dataset.tab) ? '' : 'none';
       });
       if (btn.dataset.tab === 'revenue') loadRevenue();
       if (btn.dataset.tab === 'requests') loadRequests();
       if (btn.dataset.tab === 'invitations') loadInvitations();
+      if (btn.dataset.tab === 'notify') initNotifyTab();
     });
   });
   document.getElementById('reloadReqBtn').addEventListener('click', loadRequests);
   document.getElementById('reloadInvBtn').addEventListener('click', loadInvitations);
   document.getElementById('newInviteBtn').addEventListener('click', openNewInviteModal);
+  document.getElementById('reloadNotifyBtn').addEventListener('click', loadNotifyHistory);
 
   // 月次台帳
   const today = new Date();
@@ -933,6 +998,170 @@
         btn.textContent = '招待を送信';
       }
     });
+  }
+
+  // =====================================================
+  // Phase 4-4: 通知送信タブ
+  // =====================================================
+  let _notifyTabInitialized = false;
+  async function initNotifyTab() {
+    if (!_notifyTabInitialized) {
+      _notifyTabInitialized = true;
+
+      const scopeSel = document.getElementById('ntScope');
+      scopeSel.addEventListener('change', async () => {
+        const field = document.getElementById('ntIndividualField');
+        const isIndiv = scopeSel.value === 'individual';
+        field.style.display = isIndiv ? '' : 'none';
+        if (isIndiv) await loadIndividualPartnerList();
+      });
+
+      document.getElementById('notifyForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const msgEl = document.getElementById('notifyMsg');
+        const btn = document.getElementById('ntSubmit');
+        msgEl.innerHTML = '';
+
+        const scope = scopeSel.value;
+        const title = document.getElementById('ntTitle').value.trim();
+        const body = document.getElementById('ntBody').value;
+        const action_url = document.getElementById('ntActionUrl').value.trim();
+        const priority = document.getElementById('ntPriority').value;
+
+        if (!title) {
+          msgEl.innerHTML = `<div class="msg msg--err">タイトルを入力してください</div>`;
+          return;
+        }
+        if (!body.trim()) {
+          msgEl.innerHTML = `<div class="msg msg--err">本文を入力してください</div>`;
+          return;
+        }
+
+        const payload = { title, body, priority, action_url: action_url || null };
+        if (scope === 'individual') {
+          const checked = Array.from(document.querySelectorAll('#ntIndividualList input:checked')).map(x => x.value);
+          if (checked.length === 0) {
+            msgEl.innerHTML = `<div class="msg msg--err">宛先を1件以上選択してください</div>`;
+            return;
+          }
+          payload.partner_ids = checked;
+        } else {
+          payload.broadcast_scope = scope;
+        }
+
+        // 確認ダイアログ
+        const recipientDesc = scope === 'all_active' ? '全稼働中代理店'
+                            : scope === 'all_supers' ? '全総代理店'
+                            : `選択した${payload.partner_ids?.length || 0}件`;
+        if (!confirm(`${recipientDesc}に通知を送信します。よろしいですか？\n\nタイトル: ${title}`)) return;
+
+        btn.disabled = true;
+        btn.textContent = '送信中…';
+        try {
+          const r = await AdaptAPI.call('/api/admin/notify', { method: 'POST', body: payload });
+          msgEl.innerHTML = `<div class="msg msg--ok">${r.sent_count}件の代理店に送信しました</div>`;
+          Adapt.toast(`通知を ${r.sent_count}件送信しました`, 'success');
+          // フォームリセット
+          document.getElementById('ntTitle').value = '';
+          document.getElementById('ntBody').value = '';
+          document.getElementById('ntActionUrl').value = '';
+          document.getElementById('ntPriority').value = 'normal';
+          scopeSel.value = 'all_active';
+          document.getElementById('ntIndividualField').style.display = 'none';
+          loadNotifyHistory();
+        } catch (e) {
+          const map = {
+            missing_recipients: '宛先が指定されていません',
+            no_valid_recipients: '有効な宛先が見つかりません',
+            invalid_title: 'タイトルが不正です（200字以内）',
+            invalid_body: '本文が不正です（5000字以内）',
+            invalid_action_url: 'アクションURLが不正です（500字以内）'
+          };
+          msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '送信';
+        }
+      });
+    }
+    loadNotifyHistory();
+  }
+
+  async function loadIndividualPartnerList() {
+    const el = document.getElementById('ntIndividualList');
+    el.innerHTML = '<span class="muted">読み込み中…</span>';
+    try {
+      const r = await AdaptAPI.call('/api/admin/partners');
+      const active = (r.partners || []).filter(p => p.status === 'active');
+      if (active.length === 0) {
+        el.innerHTML = '<span class="muted">稼働中の代理店はありません</span>';
+        return;
+      }
+      el.innerHTML = `
+        <div style="margin-bottom:8px;display:flex;gap:8px;">
+          <button type="button" class="btn btn--sm" id="ntSelectAll">全選択</button>
+          <button type="button" class="btn btn--sm" id="ntSelectSupers">総代理店のみ</button>
+          <button type="button" class="btn btn--sm" id="ntSelectNone">全解除</button>
+        </div>
+        ${active.map(p => `
+          <label style="display:block;padding:3px 4px;cursor:pointer;">
+            <input type="checkbox" value="${Adapt.escapeHTML(p.partner_id)}" data-type="${p.type}" />
+            <span class="mono">${Adapt.escapeHTML(p.partner_id)}</span>
+            <span style="font-size:11px;color:#666;margin-left:6px;">${p.type === 'super' ? '総代理店' : '代理店'}</span>
+            <span style="margin-left:6px;">${Adapt.escapeHTML(p.company_name)}</span>
+          </label>
+        `).join('')}
+      `;
+      document.getElementById('ntSelectAll').addEventListener('click', () => {
+        el.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      });
+      document.getElementById('ntSelectSupers').addEventListener('click', () => {
+        el.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = (cb.dataset.type === 'super'));
+      });
+      document.getElementById('ntSelectNone').addEventListener('click', () => {
+        el.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+      });
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  async function loadNotifyHistory() {
+    const el = document.getElementById('notifyHistoryContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const r = await AdaptAPI.call('/api/admin/notifications');
+      const list = r.notifications || [];
+      if (list.length === 0) {
+        el.innerHTML = `<p class="muted">送信履歴はまだありません。</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>送信日時</th><th>タイトル</th><th>優先度</th><th>送信者</th><th>宛先</th><th>既読</th>
+          </tr></thead>
+          <tbody>
+            ${list.map(n => {
+              const readRate = n.recipient_count > 0 ? Math.round((n.read_count / n.recipient_count) * 100) : 0;
+              const prio = n.priority === 'high' ? '<span style="color:#b91c1c;font-weight:700;">重要</span>'
+                         : n.priority === 'low' ? '<span style="color:#666;">低</span>'
+                         : '<span>通常</span>';
+              return `
+                <tr>
+                  <td class="mono">${new Date(n.created_at.replace(' ','T')+(n.created_at.endsWith('Z')?'':'Z')).toLocaleString('ja-JP')}</td>
+                  <td title="${Adapt.escapeHTML(n.body || '').substring(0,200)}">${Adapt.escapeHTML(n.title)}</td>
+                  <td>${prio}</td>
+                  <td class="mono" style="font-size:11px;">${Adapt.escapeHTML(n.sender_login || '-')}</td>
+                  <td class="mono">${n.recipient_count}件</td>
+                  <td class="mono">${n.read_count}/${n.recipient_count} (${readRate}%)</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
   }
 
   // =====================================================

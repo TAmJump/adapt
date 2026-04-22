@@ -1722,6 +1722,121 @@ ${resetUrl}
         return json({ ok: true, type }, 200, cors);
       }
 
+      // =============== Phase 4-4: 通知機能（partner_notifications） ===============
+
+      // partner 側: 通知一覧取得
+      if (path === '/api/partner/notifications' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 100);
+        const onlyUnread = url.searchParams.get('unread') === '1';
+
+        let query = "SELECT id, sender_type, title, body, action_url, priority, read_at, created_at " +
+                    "  FROM partner_notifications " +
+                    " WHERE partner_id = ?";
+        const binds = [r.partner.partner_id];
+        if (onlyUnread) query += " AND read_at IS NULL";
+        query += " ORDER BY created_at DESC LIMIT ?";
+        binds.push(limit);
+
+        const rows = await db.prepare(query).bind(...binds).all();
+        const unread = await db.prepare(
+          "SELECT COUNT(*) AS c FROM partner_notifications WHERE partner_id = ? AND read_at IS NULL"
+        ).bind(r.partner.partner_id).first();
+
+        return json({
+          ok: true,
+          notifications: rows.results || [],
+          unread_count: unread?.c || 0
+        }, 200, cors);
+      }
+
+      // partner 側: 未読件数のみ取得（ベル表示用・軽量）
+      if (path === '/api/partner/notifications/unread-count' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const row = await db.prepare(
+          "SELECT COUNT(*) AS c FROM partner_notifications WHERE partner_id = ? AND read_at IS NULL"
+        ).bind(r.partner.partner_id).first();
+        return json({ ok: true, unread_count: row?.c || 0 }, 200, cors);
+      }
+
+      // partner 側: 既読化
+      const readMatch = path.match(/^\/api\/partner\/notifications\/(\d+)\/read$/);
+      if (readMatch && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const id = parseInt(readMatch[1], 10);
+
+        const n = await db.prepare(
+          "SELECT partner_id FROM partner_notifications WHERE id = ?"
+        ).bind(id).first();
+        if (!n) return json({ error: 'notification_not_found' }, 404, cors);
+        if (n.partner_id !== r.partner.partner_id) return json({ error: 'forbidden' }, 403, cors);
+
+        await db.prepare(
+          "UPDATE partner_notifications SET read_at = datetime('now') WHERE id = ? AND read_at IS NULL"
+        ).bind(id).run();
+        return json({ ok: true }, 200, cors);
+      }
+
+      // partner 側: 全既読化
+      if (path === '/api/partner/notifications/read-all' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const res = await db.prepare(
+          "UPDATE partner_notifications SET read_at = datetime('now') WHERE partner_id = ? AND read_at IS NULL"
+        ).bind(r.partner.partner_id).run();
+        return json({ ok: true, read_count: res.meta?.changes || 0 }, 200, cors);
+      }
+
+      // super → パートナー代理店への通知送信
+      if (path === '/api/partner/notify' && method === 'POST') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        if (r.partner.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
+
+        const b = (await request.json()) || {};
+        const { partner_ids, title, body, action_url, priority } = b;
+
+        if (!Array.isArray(partner_ids) || partner_ids.length === 0) return json({ error: 'missing_partner_ids' }, 400, cors);
+        if (!title || typeof title !== 'string' || title.length > 200) return json({ error: 'invalid_title' }, 400, cors);
+        if (!body || typeof body !== 'string' || body.length > 5000) return json({ error: 'invalid_body' }, 400, cors);
+        const pr = ['low', 'normal', 'high'].includes(priority) ? priority : 'normal';
+        if (action_url && (typeof action_url !== 'string' || action_url.length > 500)) return json({ error: 'invalid_action_url' }, 400, cors);
+
+        // 権限チェック: 全ての partner_id が自分の sub-agent（parent_partner_id = 自分）であること
+        const placeholders = partner_ids.map(() => '?').join(',');
+        const valids = await db.prepare(
+          `SELECT partner_id FROM partners WHERE partner_id IN (${placeholders}) AND parent_partner_id = ? AND status != 'terminated'`
+        ).bind(...partner_ids, r.partner.partner_id).all();
+        const validIds = (valids.results || []).map(x => x.partner_id);
+        if (validIds.length !== partner_ids.length) {
+          return json({
+            error: 'some_partners_not_yours',
+            invalid_ids: partner_ids.filter(x => !validIds.includes(x))
+          }, 403, cors);
+        }
+
+        // 一括 INSERT
+        const stmts = validIds.map(pid =>
+          db.prepare(
+            "INSERT INTO partner_notifications (partner_id, sender_type, sender_partner_id, title, body, action_url, priority) " +
+            "VALUES (?, 'super', ?, ?, ?, ?, ?)"
+          ).bind(pid, r.partner.partner_id, title, body, action_url || null, pr)
+        );
+        await db.batch(stmts);
+
+        await audit(db, 'partner_notification_sent', null, r.partner.login_id, {
+          sender_partner_id: r.partner.partner_id,
+          recipient_count: validIds.length,
+          title
+        }, request);
+
+        return json({ ok: true, sent_count: validIds.length, recipient_ids: validIds }, 200, cors);
+      }
+
       // =============== 代理店パスワード変更・リセット（Phase 4-2） ===============
 
       // ログイン中の代理店によるパスワード変更
@@ -2379,6 +2494,86 @@ ${resetUrl}
           " ORDER BY p.type ASC, p.created_at DESC"
         ).all();
         return json({ ok: true, partners: rows.results || [] }, 200, cors);
+      }
+
+      // =============== Phase 4-4: admin 通知送信 ===============
+
+      // admin → 総代理店への通知送信（複数宛先対応・パートナー代理店も指定可）
+      if (path === '/api/admin/notify' && method === 'POST') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const b = (await request.json()) || {};
+        const { partner_ids, title, body, action_url, priority, broadcast_scope } = b;
+
+        if (!title || typeof title !== 'string' || title.length > 200) return json({ error: 'invalid_title' }, 400, cors);
+        if (!body || typeof body !== 'string' || body.length > 5000) return json({ error: 'invalid_body' }, 400, cors);
+        const pr = ['low', 'normal', 'high'].includes(priority) ? priority : 'normal';
+        if (action_url && (typeof action_url !== 'string' || action_url.length > 500)) return json({ error: 'invalid_action_url' }, 400, cors);
+
+        // 宛先決定：broadcast_scope があれば全送信、なければ partner_ids
+        let recipients = [];
+        if (broadcast_scope === 'all_active') {
+          const rows = await db.prepare("SELECT partner_id FROM partners WHERE status = 'active'").all();
+          recipients = (rows.results || []).map(x => x.partner_id);
+        } else if (broadcast_scope === 'all_supers') {
+          const rows = await db.prepare("SELECT partner_id FROM partners WHERE type = 'super' AND status = 'active'").all();
+          recipients = (rows.results || []).map(x => x.partner_id);
+        } else if (Array.isArray(partner_ids) && partner_ids.length > 0) {
+          const placeholders = partner_ids.map(() => '?').join(',');
+          const rows = await db.prepare(
+            `SELECT partner_id FROM partners WHERE partner_id IN (${placeholders}) AND status != 'terminated'`
+          ).bind(...partner_ids).all();
+          recipients = (rows.results || []).map(x => x.partner_id);
+        } else {
+          return json({ error: 'missing_recipients' }, 400, cors);
+        }
+
+        if (recipients.length === 0) return json({ error: 'no_valid_recipients' }, 400, cors);
+
+        // D1 batch の上限を考慮して 100件ずつに分割
+        const chunkSize = 100;
+        for (let i = 0; i < recipients.length; i += chunkSize) {
+          const chunk = recipients.slice(i, i + chunkSize);
+          const stmts = chunk.map(pid =>
+            db.prepare(
+              "INSERT INTO partner_notifications (partner_id, sender_type, sender_staff_id, title, body, action_url, priority) " +
+              "VALUES (?, 'admin', ?, ?, ?, ?, ?)"
+            ).bind(pid, r.user.staff_id, title, body, action_url || null, pr)
+          );
+          await db.batch(stmts);
+        }
+
+        await audit(db, 'admin_notification_sent', r.user.staff_id, r.user.login_id, {
+          recipient_count: recipients.length,
+          broadcast_scope: broadcast_scope || null,
+          title,
+          priority: pr
+        }, request);
+
+        return json({ ok: true, sent_count: recipients.length }, 200, cors);
+      }
+
+      // admin: 送信済み通知の一覧
+      if (path === '/api/admin/notifications' && method === 'GET') {
+        const r = await requireTamjAdmin(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 200);
+        // sender_type で admin 送信のものを title ごとに集約
+        const rows = await db.prepare(
+          "SELECT n.title, n.body, n.priority, n.created_at, " +
+          "       s.login_id AS sender_login, " +
+          "       COUNT(*) AS recipient_count, " +
+          "       SUM(CASE WHEN n.read_at IS NOT NULL THEN 1 ELSE 0 END) AS read_count " +
+          "  FROM partner_notifications n " +
+          "  LEFT JOIN master_staff s ON n.sender_staff_id = s.staff_id " +
+          " WHERE n.sender_type = 'admin' " +
+          " GROUP BY n.title, n.body, n.created_at, s.login_id " +
+          " ORDER BY n.created_at DESC LIMIT ?"
+        ).bind(limit).all();
+
+        return json({ ok: true, notifications: rows.results || [] }, 200, cors);
       }
 
       // =============== Phase 4-3b: 代理店セルフ登録（招待フロー） ===============

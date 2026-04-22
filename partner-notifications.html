@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>お知らせ｜Adavoo Partner</title>
+<link rel="stylesheet" href="assets/style.css?v=20260421" />
+<style>
+  .notif-card {
+    border: 1px solid #e3e3e0; border-radius: 6px; padding: 14px 16px;
+    margin-bottom: 10px; background: #fff; transition: background 0.15s;
+  }
+  .notif-card.unread { background: #fff8e1; border-left: 3px solid #c4432b; }
+  .notif-card.priority-high { border-left: 3px solid #b91c1c; }
+  .notif-card.priority-low { opacity: 0.75; }
+  .notif-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 8px; margin-bottom: 6px;
+  }
+  .notif-title { font-weight: 700; font-size: 14px; color: #0a0e1a; }
+  .notif-meta { font-size: 11px; color: #666; white-space: nowrap; }
+  .notif-body {
+    font-size: 13px; color: #444; line-height: 1.6; white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .notif-sender {
+    display: inline-block; font-size: 10px; padding: 1px 6px;
+    border-radius: 100px; margin-right: 6px; letter-spacing: 0.04em;
+  }
+  .notif-sender.admin { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .notif-sender.super { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .notif-sender.system { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+  .priority-badge {
+    display: inline-block; font-size: 10px; padding: 1px 5px;
+    border-radius: 2px; font-weight: 700; letter-spacing: 0.04em;
+  }
+  .priority-badge.high { background: #fee2e2; color: #b91c1c; }
+  .notif-actions { margin-top: 8px; display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<div id="adapt-header"></div>
+
+<main class="container">
+  <section class="page-intro">
+    <p class="section-label">Notifications</p>
+    <h1>お知らせ</h1>
+    <p id="pageSubtitle" class="muted">読み込み中…</p>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn--sm" data-filter="all" id="filterAll">すべて</button>
+          <button class="btn btn--sm" data-filter="unread" id="filterUnread">未読のみ</button>
+        </div>
+        <button class="btn btn--ghost btn--sm" id="readAllBtn" type="button">すべて既読にする</button>
+      </div>
+      <div id="listContent"><p class="muted">読み込み中…</p></div>
+    </section>
+  </div>
+</main>
+
+<script src="assets/common.js?v=20260421"></script>
+<script>
+(async function () {
+  const r = await Adapt.requirePartnerLogin('partner-login.html');
+  if (!r) return;
+
+  Adapt.renderPartnerHeader({ active: 'notifications' });
+
+  const isSuper = r.partner.type === 'super';
+  document.getElementById('pageSubtitle').textContent =
+    (isSuper ? '総代理店' : '代理店') + ' / ' + r.partner.company_name;
+
+  let currentFilter = 'all';
+  let currentList = [];
+
+  document.getElementById('filterAll').addEventListener('click', () => { currentFilter = 'all'; updateFilterButtons(); load(); });
+  document.getElementById('filterUnread').addEventListener('click', () => { currentFilter = 'unread'; updateFilterButtons(); load(); });
+  document.getElementById('readAllBtn').addEventListener('click', async () => {
+    if (!confirm('すべての通知を既読にしますか？')) return;
+    try {
+      const res = await PartnerAPI.call('/api/partner/notifications/read-all', { method: 'POST' });
+      Adapt.toast(`${res.read_count}件を既読にしました`, 'success');
+      load();
+    } catch (e) {
+      Adapt.toast('失敗: ' + e.message, 'error');
+    }
+  });
+
+  updateFilterButtons();
+  load();
+
+  async function load() {
+    const el = document.getElementById('listContent');
+    el.innerHTML = '<p class="muted">読み込み中…</p>';
+    try {
+      const q = currentFilter === 'unread' ? '?unread=1' : '';
+      const res = await PartnerAPI.call('/api/partner/notifications' + q);
+      currentList = res.notifications || [];
+
+      if (currentList.length === 0) {
+        el.innerHTML = `<p class="muted">${currentFilter === 'unread' ? '未読の通知はありません。' : 'まだ通知はありません。'}</p>`;
+        return;
+      }
+
+      el.innerHTML = currentList.map(n => {
+        const isUnread = !n.read_at;
+        const senderLabel = { admin: 'タムジ社', super: '総代理店', system: 'システム' }[n.sender_type] || n.sender_type;
+        const priorityBadge = n.priority === 'high' ? '<span class="priority-badge high">重要</span>' : '';
+        const created = new Date(n.created_at.replace(' ', 'T') + (n.created_at.endsWith('Z') ? '' : 'Z'));
+        return `
+          <div class="notif-card ${isUnread ? 'unread' : ''} priority-${n.priority || 'normal'}" data-id="${n.id}">
+            <div class="notif-head">
+              <div style="flex:1;">
+                <span class="notif-sender ${n.sender_type}">${senderLabel}</span>
+                ${priorityBadge}
+                <span class="notif-title">${Adapt.escapeHTML(n.title)}</span>
+              </div>
+              <div class="notif-meta">${created.toLocaleString('ja-JP')}</div>
+            </div>
+            <div class="notif-body">${Adapt.escapeHTML(n.body)}</div>
+            <div class="notif-actions">
+              ${n.action_url ? `<a class="btn btn--sm btn--primary" href="${Adapt.escapeHTML(n.action_url)}">詳細を見る →</a>` : ''}
+              ${isUnread ? `<button class="btn btn--sm" data-read="${n.id}">既読にする</button>` : '<span style="font-size:11px;color:#15803d;">✓ 既読</span>'}
+            </div>
+          </div>`;
+      }).join('');
+
+      // 既読化ボタン
+      el.querySelectorAll('[data-read]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await PartnerAPI.call(`/api/partner/notifications/${btn.dataset.read}/read`, { method: 'POST' });
+            load();
+            // ヘッダーバッジ更新
+            const res = await PartnerAPI.call('/api/partner/notifications/unread-count');
+            const badge = document.getElementById('notifBadge');
+            if (badge) {
+              if (res.unread_count > 0) {
+                badge.textContent = res.unread_count > 99 ? '99+' : res.unread_count;
+                badge.style.display = '';
+              } else {
+                badge.style.display = 'none';
+              }
+            }
+          } catch (e) {
+            Adapt.toast('失敗: ' + e.message, 'error');
+          }
+        });
+      });
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  function updateFilterButtons() {
+    document.querySelectorAll('[data-filter]').forEach(b => {
+      b.classList.toggle('btn--primary', b.dataset.filter === currentFilter);
+    });
+  }
+})();
+</script>
+</body>
+</html>
