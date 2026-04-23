@@ -1035,44 +1035,96 @@ ${verifyUrl}
 
       // ログイン
       if (path === '/api/auth/login' && method === 'POST') {
+        // 統合ログイン（v2.8）: master_staff / partners 両方を受け付ける
+        // 1. master_staff を先に検索 → 見つかればその処理
+        // 2. 見つからなければ partners を検索 → 見つかればその処理
+        // 3. どちらにもなければ invalid_credentials
         const { login_id, password } = (await request.json()) || {};
         if (!login_id || !password) return json({ error: 'missing_fields' }, 400, cors);
 
         const hash = await sha256(password);
+
+        // -------- 1) master_staff として検索 --------
         const user = await db.prepare(
           "SELECT * FROM master_staff WHERE login_id = ? AND password_hash = ?"
         ).bind(login_id, hash).first();
 
-        if (!user) {
-          // 未承認の登録中アドレス/loginがあるかチェック
-          const pending = await db.prepare(
-            "SELECT * FROM email_verifications WHERE used_at IS NULL AND expires_at > datetime('now')"
-          ).all();
-          let isPending = false;
-          for (const r of (pending.results || [])) {
-            try { if (JSON.parse(r.pending_data).login_id === login_id) { isPending = true; break; } } catch {}
-          }
-          await audit(db, 'login_failed', null, login_id, { pending: isPending }, request);
-          return json({ error: isPending ? 'pending_verification' : 'invalid_credentials' }, 401, cors);
-        }
-        if (user.status !== 'active') return json({ error: 'account_suspended' }, 403, cors);
+        if (user) {
+          if (user.status !== 'active') return json({ error: 'account_suspended' }, 403, cors);
 
-        const token = randomId(48);
-        const expiresAt = plusSec(60 * 60 * 24 * 30);
-        await db.batch([
-          db.prepare("INSERT INTO sessions (token, staff_id, expires_at) VALUES (?,?,?)")
-            .bind(token, user.staff_id, expiresAt),
-          db.prepare("UPDATE master_staff SET last_login_at = datetime('now') WHERE staff_id = ?")
-            .bind(user.staff_id)
-        ]);
-        await audit(db, 'login', user.staff_id, user.login_id, null, request);
-        return json({
-          ok: true, token, expires_at: expiresAt,
-          user: {
-            staff_id: user.staff_id, login_id: user.login_id, name: user.name, email: user.email,
-            role: user.role, master_company_id: user.master_company_id
+          const token = randomId(48);
+          const expiresAt = plusSec(60 * 60 * 24 * 30);
+          await db.batch([
+            db.prepare("INSERT INTO sessions (token, staff_id, expires_at) VALUES (?,?,?)")
+              .bind(token, user.staff_id, expiresAt),
+            db.prepare("UPDATE master_staff SET last_login_at = datetime('now') WHERE staff_id = ?")
+              .bind(user.staff_id)
+          ]);
+          await audit(db, 'login', user.staff_id, user.login_id, null, request);
+          return json({
+            ok: true,
+            user_type: 'master_staff',
+            token,
+            expires_at: expiresAt,
+            user: {
+              staff_id: user.staff_id, login_id: user.login_id, name: user.name, email: user.email,
+              role: user.role, master_company_id: user.master_company_id
+            }
+          }, 200, cors);
+        }
+
+        // -------- 2) partners として検索 --------
+        const p = await db.prepare(
+          "SELECT * FROM partners WHERE login_id = ? AND password_hash = ?"
+        ).bind(login_id, hash).first();
+
+        if (p) {
+          if (p.status !== 'active') {
+            await audit(db, 'partner_login_blocked', null, login_id, { status: p.status }, request);
+            return json({ error: 'partner_suspended', status_detail: p.status }, 403, cors);
           }
-        }, 200, cors);
+
+          const token = randomId(48);
+          const expiresAt = plusSec(60 * 60 * 24 * 30);
+          await db.batch([
+            db.prepare("INSERT INTO partner_sessions (token, partner_id, expires_at) VALUES (?,?,?)")
+              .bind(token, p.partner_id, expiresAt),
+            db.prepare("UPDATE partners SET updated_at = datetime('now') WHERE partner_id = ?")
+              .bind(p.partner_id)
+          ]);
+
+          await audit(db, 'partner_login', null, login_id, { partner_id: p.partner_id, type: p.type, via: 'unified_login' }, request);
+          return json({
+            ok: true,
+            user_type: 'partner',
+            token,
+            expires_at: expiresAt,
+            partner: {
+              partner_id: p.partner_id,
+              type: p.type,
+              parent_partner_id: p.parent_partner_id,
+              company_name: p.company_name,
+              code: p.code,
+              login_id: p.login_id,
+              email: p.email,
+              contract_start_at: p.contract_start_at,
+              contract_end_at: p.contract_end_at,
+              revenue_share_pct: p.revenue_share_pct
+            }
+          }, 200, cors);
+        }
+
+        // -------- 3) どちらにも見つからなかった --------
+        // 未承認の登録中アドレス/loginがあるかチェック（master_staff 側のみ対象）
+        const pending = await db.prepare(
+          "SELECT * FROM email_verifications WHERE used_at IS NULL AND expires_at > datetime('now')"
+        ).all();
+        let isPending = false;
+        for (const r of (pending.results || [])) {
+          try { if (JSON.parse(r.pending_data).login_id === login_id) { isPending = true; break; } } catch {}
+        }
+        await audit(db, 'login_failed', null, login_id, { pending: isPending, unified: true }, request);
+        return json({ error: isPending ? 'pending_verification' : 'invalid_credentials' }, 401, cors);
       }
 
       if (path === '/api/auth/logout' && method === 'POST') {

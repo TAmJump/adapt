@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
 <title>ログイン｜Adavoo</title>
-<link rel="stylesheet" href="assets/style.css?v=20260421" />
+<link rel="stylesheet" href="assets/style.css?v=20260422" />
 </head>
 <body>
 <div id="adapt-header"></div>
@@ -43,14 +43,34 @@
   </section>
 </main>
 
-<script src="assets/common.js?v=20260421"></script>
+<script src="assets/common.js?v=20260422"></script>
 <script>
   Adapt.renderHeader({ loggedIn: false });
   Adapt.bindPasswordToggles();
 
-  if (AdaptAPI.token()) {
-    AdaptAPI.call('/api/auth/me').then(() => location.href = 'index.html').catch(() => AdaptAPI.clear());
-  }
+  // 既ログインチェック（どちらのセッションでも有効なら対応する画面へ）
+  // 1. master_staff トークンがあれば /api/auth/me で検証 → index.html
+  // 2. なければ partner トークンがあれば /api/partner/me で検証 → partner-dashboard.html
+  (async function checkExistingSession() {
+    if (AdaptAPI.token()) {
+      try {
+        await AdaptAPI.call('/api/auth/me');
+        location.href = 'index.html';
+        return;
+      } catch {
+        AdaptAPI.clear();
+      }
+    }
+    if (PartnerAPI.token()) {
+      try {
+        await PartnerAPI.call('/api/partner/me');
+        location.href = 'partner-dashboard.html';
+        return;
+      } catch {
+        PartnerAPI.clear();
+      }
+    }
+  })();
 
   const form = document.getElementById('loginForm');
   const msg = document.getElementById('msg');
@@ -62,6 +82,9 @@
     btn.disabled = true;
     btn.textContent = 'ログイン中…';
     try {
+      // 統合ログイン: /api/auth/login が master_staff / partner 両方を受け付ける
+      // 認証ヘッダを送らないよう AdaptAPI.call を使う（ただし成功時のトークン保存先は
+      // レスポンスの user_type によって分岐する）
       const data = await AdaptAPI.call('/api/auth/login', {
         method: 'POST',
         body: {
@@ -69,14 +92,24 @@
           password: document.getElementById('password').value
         }
       });
-      AdaptAPI.setToken(data.token, data.expires_at);
-      AdaptAPI.setUser(data.user);
-      location.href = 'index.html';
+
+      if (data.user_type === 'partner') {
+        // 代理店として認証成功 → PartnerAPI にトークン保存
+        PartnerAPI.setToken(data.token, data.expires_at);
+        PartnerAPI.setPartner(data.partner);
+        location.href = 'partner-dashboard.html';
+      } else {
+        // デフォルト: master_staff として認証成功
+        AdaptAPI.setToken(data.token, data.expires_at);
+        AdaptAPI.setUser(data.user);
+        location.href = 'index.html';
+      }
     } catch (e) {
       const map = {
         invalid_credentials: 'ログインIDまたはパスワードが違います。',
         pending_verification: 'メール確認が未完了です。登録時に送信されたメールのボタンを押してください。',
         account_suspended: 'このアカウントは停止されています。',
+        partner_suspended: 'この代理店アカウントは現在利用できません（契約終了・停止等）。',
         missing_fields: '入力を確認してください。'
       };
       msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
