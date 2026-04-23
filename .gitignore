@@ -5,4 +5,25 @@ node_modules/
 .env.*
 .vscode/
 .idea/
+
+# 設計書・引き継ぎ書（Secret Scanning 事故予防）
+# コミット経緯: v2.10 §21.3b.2 でリブランディング後パターン追加
 Adapt_設計書_*.html
+Adavoo_設計書_*.html
+Adavoo_*.html
+Adavoo_Phase*_引き継ぎ書_*.html
+Touchvoo_設計書_*.html
+Medvoo_設計書_*.html
+TAmj*_設計書_*.html
+TAmJump_完全設計書_*.html
+
+# 法務ドラフト（弁護士レビュー前）
+Adavoo_反社条項_*.html
+Adavoo_利用規約_*.html
+Adavoo_terms_*.html
+
+# 引き継ぎ・メモ
+引き継ぎ*.md
+引継ぎ*.md
+handover_*.md
+
