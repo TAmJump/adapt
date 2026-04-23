@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>代理店ダッシュボード｜Adavoo</title>
+<title>Resellerダッシュボード｜Adavoo</title>
 <link rel="stylesheet" href="assets/style.css?v=20260421" />
 <style>
   .metric-grid {
@@ -79,7 +79,7 @@
 <main class="container">
   <section class="page-intro">
     <p class="section-label">Partner Dashboard</p>
-    <h1>代理店ダッシュボード</h1>
+    <h1>Resellerダッシュボード</h1>
     <p id="pageSubtitle">読み込み中…</p>
   </section>
 
@@ -95,15 +95,15 @@
 
     <!-- 自分の情報 -->
     <section class="card">
-      <h2 class="panel-title">代理店情報</h2>
+      <h2 class="panel-title">Reseller情報</h2>
       <table id="selfTbl"></table>
     </section>
 
-    <!-- パートナー代理店（総代理店のみ表示） -->
+    <!-- Reseller（Master Resellerのみ表示） -->
     <section class="card" id="subAgentsCard" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h2 class="panel-title" style="margin:0;">パートナー代理店</h2>
-        <button class="btn btn--primary btn--sm" id="addAgentBtn" type="button">＋ パートナー代理店を登録</button>
+        <h2 class="panel-title" style="margin:0;">Reseller</h2>
+        <button class="btn btn--primary btn--sm" id="addAgentBtn" type="button">＋ Resellerを登録</button>
       </div>
       <div id="subAgentsContent"></div>
     </section>
@@ -117,13 +117,13 @@
   </div>
 </main>
 
-<!-- パートナー代理店登録モーダル -->
+<!-- Reseller登録モーダル -->
 <div id="modalWrap" style="display:none;"></div>
 
 <script src="assets/common.js?v=20260421"></script>
 <script>
 (async function () {
-  // 代理店ログインチェック
+  // Resellerログインチェック
   const r = await Adapt.requirePartnerLogin('partner-login.html');
   if (!r) return;
   Adapt.renderPartnerHeader({ active: 'dashboard' });
@@ -132,19 +132,19 @@
   const isSuper = p.type === 'super';
 
   document.getElementById('pageSubtitle').textContent =
-    (isSuper ? '総代理店' : '代理店') + ' / ' + p.company_name;
+    (isSuper ? 'Master Reseller' : 'Reseller') + ' / ' + p.company_name;
 
   // --- 自分の情報テーブル ---
   document.getElementById('selfTbl').innerHTML = `
-    <tr><th style="width:180px">${isSuper ? '総代理店コード' : '代理店コード'}</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
-    <tr><th>種別</th><td>${isSuper ? '総代理店' : '代理店'}</td></tr>
+    <tr><th style="width:180px">${isSuper ? 'Master Resellerコード' : 'Resellerコード'}</th><td class="mono">${Adapt.escapeHTML(p.code)}</td></tr>
+    <tr><th>種別</th><td>${isSuper ? 'Master Reseller' : 'Reseller'}</td></tr>
     <tr><th>会社名</th><td>${Adapt.escapeHTML(p.company_name)}</td></tr>
     <tr><th>ログインID</th><td class="mono">${Adapt.escapeHTML(p.login_id)}</td></tr>
     <tr><th>メール</th><td>${Adapt.escapeHTML(p.email || '-')}</td></tr>
     <tr><th>電話</th><td>${Adapt.escapeHTML(p.phone || '-')}</td></tr>
     <tr><th>契約開始日</th><td class="mono">${formatDate(p.contract_start_at)}</td></tr>
     <tr><th>契約終了予定日</th><td class="mono">${formatDate(p.contract_end_at)}</td></tr>
-    ${p.parent ? `<tr><th>ご担当の総代理店</th><td><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</td></tr>` : ''}
+    ${p.parent ? `<tr><th>ご担当の Master Reseller</th><td><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</td></tr>` : ''}
     ${isSuper && p.revenue_share_pct != null ? `<tr><th>按分率（タムジ→自社）</th><td class="mono">${p.revenue_share_pct}%</td></tr>` : ''}
   `;
 
@@ -168,7 +168,7 @@
     if (isSuper && sm.sub_agent_count != null) {
       metrics.push(`
         <div class="metric">
-          <div class="metric__label">パートナー代理店</div>
+          <div class="metric__label">Reseller</div>
           <div class="metric__value">${sm.sub_agent_count}<span class="metric__unit">社</span></div>
         </div>`);
     }
@@ -185,12 +185,12 @@
         </div>`);
     }
     summaryEl.innerHTML = `<div class="metric-grid">${metrics.join('')}</div>
-      ${!isSuper ? '<p class="muted" style="font-size:12px; margin:10px 0 0 0;">売上情報は総代理店から共有されます（タムジ社台帳は表示されません）。</p>' : ''}`;
+      ${!isSuper ? '<p class="muted" style="font-size:12px; margin:10px 0 0 0;">売上情報はMaster Resellerから共有されます（タムジ社台帳は表示されません）。</p>' : ''}`;
   } catch (e) {
     summaryEl.innerHTML = `<div class="msg msg--err">サマリー取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
   }
 
-  // --- パートナー代理店一覧（総代理店のみ） ---
+  // --- Reseller一覧（Master Resellerのみ） ---
   if (isSuper) {
     document.getElementById('subAgentsCard').style.display = '';
     loadSubAgents();
@@ -204,7 +204,7 @@
       const r = await PartnerAPI.call('/api/partner/sub-agents');
       const list = r.sub_agents || [];
       if (list.length === 0) {
-        el.innerHTML = `<p class="muted">まだパートナー代理店が登録されていません。右上の「＋ パートナー代理店を登録」から追加してください。</p>`;
+        el.innerHTML = `<p class="muted">まだResellerが登録されていません。右上の「＋ Resellerを登録」から追加してください。</p>`;
         return;
       }
       el.innerHTML = `
@@ -255,7 +255,7 @@
           });
         });
       });
-      // Phase 4-3e: パートナー代理店詳細モーダル
+      // Phase 4-3e: Reseller詳細モーダル
       el.querySelectorAll('[data-agent-detail]').forEach(btn => {
         btn.addEventListener('click', () => {
           openSubAgentDetailModal({
@@ -294,7 +294,7 @@
     const el = document.getElementById('customersContent');
     const full = _customersCache;
     if (full.length === 0) {
-      el.innerHTML = `<p class="muted">ご紹介先企業はまだいません。代理店コードを案内して登録してもらってください。</p>`;
+      el.innerHTML = `<p class="muted">ご紹介先企業はまだいません。Resellerコードを案内して登録してもらってください。</p>`;
       return;
     }
     // フィルタ適用
@@ -352,16 +352,16 @@
     if (sel) sel.addEventListener('change', (e) => renderCustomers(e.target.value));
   }
 
-  // --- パートナー代理店登録モーダル ---
+  // --- Reseller登録モーダル ---
   function openAddAgentModal() {
     const wrap = document.getElementById('modalWrap');
     wrap.style.display = '';
     wrap.innerHTML = `
       <div class="modal-backdrop" id="modalBackdrop">
         <div class="modal" id="modalBox">
-          <h3>パートナー代理店を登録</h3>
+          <h3>Resellerを登録</h3>
           <p class="muted" style="font-size:12px; margin:0 0 12px 0;">
-            登録後、ここに表示される<strong>代理店コード・ログインID・初期パスワード</strong>を相手先にお伝えください。
+            登録後、ここに表示される<strong>Resellerコード・ログインID・初期パスワード</strong>を相手先にお伝えください。
           </p>
           <div id="agentFormMsg"></div>
           <form id="agentForm" class="stack" novalidate>
@@ -380,7 +380,7 @@
                 <input id="agPassword" type="password" required minlength="8" />
                 <button type="button" class="pw-toggle" data-pw="agPassword">表示</button>
               </div>
-              <div class="hint">8文字以上（代理店側で変更可能）</div>
+              <div class="hint">8文字以上（Reseller側で変更可能）</div>
             </div>
             <div class="field">
               <label for="agEmail">メール</label>
@@ -439,7 +439,7 @@
         password_too_short: 'パスワードは8文字以上にしてください。',
         invalid_login_id: 'ログインIDの形式が正しくありません。',
         invalid_email: 'メールアドレスの形式が正しくありません。',
-        forbidden_super_only: 'パートナー代理店の登録は総代理店のみ可能です。',
+        forbidden_super_only: 'Resellerの登録はMaster Resellerのみ可能です。',
         missing_fields: '必須項目を入力してください。'
       };
       msgEl.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
@@ -454,9 +454,9 @@
       <div class="modal-backdrop">
         <div class="modal">
           <h3>登録完了</h3>
-          <p>パートナー代理店を登録しました。以下の情報を相手先にお伝えください。</p>
+          <p>Resellerを登録しました。以下の情報を相手先にお伝えください。</p>
           <div class="credentials-box">
-            <div>代理店コード: <span class="mono">${Adapt.escapeHTML(agent.code)}</span></div>
+            <div>Resellerコード: <span class="mono">${Adapt.escapeHTML(agent.code)}</span></div>
             <div>ログインID: <span class="mono">${Adapt.escapeHTML(agent.login_id)}</span></div>
             <div>初期パスワード: <span class="mono">${Adapt.escapeHTML(plainPassword)}</span></div>
             <div style="margin-top:6px; font-size:11px; color:#8a6400;">
@@ -464,7 +464,7 @@
             </div>
           </div>
           <p style="font-size:12px; color:#555;">
-            代理店側のログインURL: <br>
+            Reseller側のログインURL: <br>
             <a href="partner-login.html" target="_blank" class="mono" style="word-break:break-all;">${location.origin}/partner-login.html</a>
           </p>
           <div class="modal-actions">
@@ -489,7 +489,7 @@
   }
 
   // =====================================================
-  // Phase 4-3a: パートナー代理店への按分率編集・履歴モーダル
+  // Phase 4-3a: Resellerへの按分率編集・履歴モーダル
   // super → agent scope・/api/partner/sub-agents/:id/share[-history]
   // =====================================================
   function getShareModalWrap() {
@@ -522,7 +522,7 @@
     const wrap = getShareModalWrap();
     const parentInfo = parentPct != null
       ? `<div style="padding:6px 10px;background:#fff8e1;border-left:3px solid #f7c85c;margin:0 0 10px 0;font-size:12px;">
-           あなた（総代理店）の取得率: <strong>${parentPct}%</strong>（この値を超えて設定はできません）
+           あなた（Master Reseller）の取得率: <strong>${parentPct}%</strong>（この値を超えて設定はできません）
          </div>`
       : '';
     wrap.innerHTML = `
@@ -532,7 +532,7 @@
           <p style="font-size:12px;color:#666;margin:0 0 12px 0;">${Adapt.escapeHTML(companyName || '')}</p>
           ${parentInfo}
           <div style="padding:8px 10px;background:#f9fafb;border-radius:4px;margin-bottom:12px;font-size:13px;">
-            現在のパートナー代理店按分率：<strong>${currentPct != null ? currentPct + '%' : '未設定'}</strong>
+            現在のReseller按分率：<strong>${currentPct != null ? currentPct + '%' : '未設定'}</strong>
           </div>
           <div id="shareEditMsg"></div>
           <form id="shareEditForm" class="stack" novalidate>
@@ -540,7 +540,7 @@
               <label for="newPct">新しい按分率（%）<span class="req">*</span></label>
               <input id="newPct" type="number" step="0.1" min="0" max="${parentPct ?? 100}" required />
               <p style="font-size:11px;color:#666;margin:4px 0 0 0;">
-                パートナー代理店への按分率。上限 = あなたの取得率。
+                Resellerへの按分率。上限 = あなたの取得率。
               </p>
             </div>
             <div class="field">
@@ -598,8 +598,8 @@
           invalid_date: '発効日が不正です',
           note_too_long: '備考は500文字以内で入力してください',
           effective_before_contract: '発効日は契約開始日以降を指定してください',
-          not_your_sub_agent: '権限がありません（あなたのパートナー代理店ではありません）',
-          forbidden_super_only: 'この操作は総代理店のみ可能です',
+          not_your_sub_agent: '権限がありません（あなたのResellerではありません）',
+          forbidden_super_only: 'この操作はMaster Resellerのみ可能です',
           parent_share_not_set: 'あなたの取得率（タムジ→自社）が未設定です。管理者に連絡してください',
           partner_not_found: '対象が見つかりません'
         };
@@ -668,7 +668,7 @@
   }
 
   // =====================================================
-  // Phase 4-3e: パートナー代理店詳細モーダル（super 側）
+  // Phase 4-3e: Reseller詳細モーダル（super 側）
   // GET /api/partner/sub-agents/:agent_id/customers
   // =====================================================
   async function openSubAgentDetailModal({ agentId, agentCode, companyName }) {
@@ -676,7 +676,7 @@
     wrap.innerHTML = `
       <div class="modal-backdrop" id="detailBackdrop">
         <div class="modal" style="max-width:760px;">
-          <h3>パートナー代理店詳細 - ${Adapt.escapeHTML(agentId)}</h3>
+          <h3>Reseller詳細 - ${Adapt.escapeHTML(agentId)}</h3>
           <p style="font-size:12px;color:#666;margin:0 0 12px 0;">
             ${Adapt.escapeHTML(companyName || '')} <span class="mono" style="margin-left:8px;">コード: ${Adapt.escapeHTML(agentCode || '-')}</span>
           </p>
@@ -696,7 +696,7 @@
       const c = document.getElementById('subDetailContent');
       if (list.length === 0) {
         c.innerHTML = `
-          <p class="muted">このパートナー代理店にはまだご紹介先企業がいません。</p>
+          <p class="muted">このResellerにはまだご紹介先企業がいません。</p>
           <p style="font-size:12px;color:#666;">相手先にパートナーコード「<strong class="mono">${Adapt.escapeHTML(agentCode || '-')}</strong>」を案内して、ご紹介先企業の登録を促してください。</p>
         `;
         return;
@@ -741,8 +741,8 @@
       `;
     } catch (e) {
       const errMap = {
-        not_your_sub_agent: '権限がありません（あなたのパートナー代理店ではありません）',
-        forbidden_super_only: 'この操作は総代理店のみ可能です',
+        not_your_sub_agent: '権限がありません（あなたのResellerではありません）',
+        forbidden_super_only: 'この操作はMaster Resellerのみ可能です',
         partner_not_found: '対象が見つかりません'
       };
       document.getElementById('subDetailContent').innerHTML =

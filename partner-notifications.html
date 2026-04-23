@@ -73,7 +73,7 @@
 
   const isSuper = r.partner.type === 'super';
   document.getElementById('pageSubtitle').textContent =
-    (isSuper ? '総代理店' : '代理店') + ' / ' + r.partner.company_name;
+    (isSuper ? 'Master Reseller' : 'Reseller') + ' / ' + r.partner.company_name;
 
   let currentFilter = 'all';
   let currentList = [];
@@ -109,7 +109,7 @@
 
       el.innerHTML = currentList.map(n => {
         const isUnread = !n.read_at;
-        const senderLabel = { admin: 'タムジ社', super: '総代理店', system: 'システム' }[n.sender_type] || n.sender_type;
+        const senderLabel = { admin: 'タムジ社', super: 'Master Reseller', system: 'システム' }[n.sender_type] || n.sender_type;
         const priorityBadge = n.priority === 'high' ? '<span class="priority-badge high">重要</span>' : '';
         const created = new Date(n.created_at.replace(' ', 'T') + (n.created_at.endsWith('Z') ? '' : 'Z'));
         return `

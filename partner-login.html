@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>代理店ログイン｜Adavoo</title>
+<title>Resellerログイン｜Adavoo</title>
 <link rel="stylesheet" href="assets/style.css?v=20260421" />
 </head>
 <body>
@@ -15,11 +15,11 @@
     <a href="lp.html" class="btn btn--ghost btn--sm">← Adavoo LPに戻る</a>
   </div>
   <section class="auth-card">
-    <h1 class="auth-title">代理店ログイン</h1>
+    <h1 class="auth-title">Resellerログイン</h1>
     <p class="auth-sub">Adavoo / Partner Sign in</p>
 
     <p class="muted" style="margin:0 0 22px 0;">
-      タムジ社から発行された総代理店・代理店アカウントでログインしてください。<br>
+      タムジ社から発行されたMaster Reseller・Resellerアカウントでログインしてください。<br>
       エンドユーザー（Adavoo会員）の方は<a href="login.html">通常ログイン</a>をご利用ください。
     </p>
 
@@ -27,7 +27,7 @@
 
     <form id="loginForm" class="stack" autocomplete="on" novalidate>
       <div class="field">
-        <label for="loginId">代理店ログインID</label>
+        <label for="loginId">ResellerログインID</label>
         <input id="loginId" name="login_id" type="text" autocomplete="username" required />
       </div>
       <div class="field">
@@ -53,7 +53,7 @@
   Adapt.renderHeader({ loggedIn: false });
   Adapt.bindPasswordToggles();
 
-  // 既に代理店トークンがあれば自動でダッシュボードへ
+  // 既にResellerトークンがあれば自動でダッシュボードへ
   if (PartnerAPI.token()) {
     PartnerAPI.call('/api/partner/me')
       .then(() => location.href = 'partner-dashboard.html')
@@ -83,7 +83,7 @@
     } catch (e) {
       const map = {
         invalid_credentials: 'ログインIDまたはパスワードが違います。',
-        partner_suspended: 'この代理店アカウントは現在利用できません（契約終了・停止等）。',
+        partner_suspended: 'このResellerアカウントは現在利用できません（契約終了・停止等）。',
         missing_fields: '入力を確認してください。'
       };
       msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;

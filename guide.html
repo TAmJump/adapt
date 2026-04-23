@@ -111,23 +111,23 @@
             <li class="sub"><a href="#module-link">モジュール連携</a></li>
             <li class="sub"><a href="#module-use">連携後の使い方</a></li>
             <li class="sub"><a href="#purchase">モジュール購入</a></li>
-            <li class="sub"><a href="#partner-code">代理店コード紐付け</a></li>
+            <li class="sub"><a href="#partner-code">Resellerコード紐付け</a></li>
             <li class="sub"><a href="#account">アカウント管理</a></li>
           </ul>
         </li>
         <li>
-          <a href="#partner">代理店向け</a>
+          <a href="#partner">Reseller向け</a>
           <ul>
-            <li class="sub"><a href="#partner-login">代理店ログイン</a></li>
+            <li class="sub"><a href="#partner-login">Resellerログイン</a></li>
             <li class="sub"><a href="#partner-dashboard">ダッシュボード</a></li>
-            <li class="sub"><a href="#sub-agent">パートナー代理店の登録</a></li>
+            <li class="sub"><a href="#sub-agent">Resellerの登録</a></li>
           </ul>
         </li>
         <li>
           <a href="#admin">タムジ管理者向け</a>
           <ul>
             <li class="sub"><a href="#admin-summary">全体サマリー</a></li>
-            <li class="sub"><a href="#admin-partner">代理店管理</a></li>
+            <li class="sub"><a href="#admin-partner">Reseller管理</a></li>
             <li class="sub"><a href="#admin-ledger">月次台帳・支払い</a></li>
           </ul>
         </li>
@@ -141,13 +141,13 @@
         <h2 class="panel-title">はじめに</h2>
         <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
           Adavooは複数のモジュール（Touchvoo・Medvoo）をひとつのIDで束ねるプラットフォームです。<br>
-          役割（エンドユーザー／代理店／タムジ管理者）によって操作画面が異なるため、この操作ガイドも役割ごとに整理しています。左の目次から必要な箇所にジャンプしてください。
+          役割（エンドユーザー／Reseller／タムジ管理者）によって操作画面が異なるため、この操作ガイドも役割ごとに整理しています。左の目次から必要な箇所にジャンプしてください。
         </p>
         <div class="note" style="margin-top:14px;">
           <strong>用語のおさらい：</strong>
           <ul style="margin:6px 0 0 0;padding-left:20px;">
             <li><strong>エンドユーザー</strong> … モジュールを実際に使う会社のアカウント</li>
-            <li><strong>代理店</strong> … エンドユーザーを勧誘・サポートする会社（総代理店／代理店の2階層）</li>
+            <li><strong>Reseller</strong> … エンドユーザーを勧誘・サポートする会社（Master Reseller／Resellerの2階層）</li>
             <li><strong>タムジ管理者</strong> … 全体の管理を行うタムジ社の運用アカウント（role=tamj_admin）</li>
           </ul>
         </div>
@@ -170,7 +170,7 @@
           <div class="step-title"><span class="step-num">2</span>フォーム入力</div>
           <div class="step-body">
             会社名・メール・管理者氏名・ログインID・パスワードを入力。<br>
-            <strong>代理店コードをお持ちの方は入力</strong>してください（任意・形式：<span class="code">SUP-XXXXXX</span> または <span class="code">AGT-XXXXXX</span>）。未入力でも登録は可能です。
+            <strong>Resellerコードをお持ちの方は入力</strong>してください（任意・形式：<span class="code">SUP-XXXXXX</span> または <span class="code">AGT-XXXXXX</span>）。未入力でも登録は可能です。
           </div>
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--line);">
@@ -187,7 +187,7 @@
           </div>
         </div>
         <div class="note">
-          代理店コードを入れて登録すると、その代理店のご紹介先企業として記録されます。入力後は<strong>変更不可</strong>です。後から追加することは可能（次項）。
+          Resellerコードを入れて登録すると、そのResellerのご紹介先企業として記録されます。入力後は<strong>変更不可</strong>です。後から追加することは可能（次項）。
         </div>
       </section>
 
@@ -272,18 +272,18 @@
       </section>
 
       <section class="card" id="partner-code">
-        <h3 class="panel-title" style="font-size:15px;">⑤ 代理店コードを後から紐付ける</h3>
+        <h3 class="panel-title" style="font-size:15px;">⑤ Resellerコードを後から紐付ける</h3>
         <p style="color:var(--ink-muted);font-size:13px;">
-          登録時に代理店コードを入力しなかった場合、後から1回だけ紐付けができます（以降は変更不可）。
+          登録時にResellerコードを入力しなかった場合、後から1回だけ紐付けができます（以降は変更不可）。
         </p>
         <div style="padding:10px 0;border-bottom:1px solid var(--line);">
           <div class="step-title"><span class="step-num">1</span>アカウント画面を開く</div>
           <div class="step-body">ヘッダーの <span class="code">アカウント</span> からアカウント画面へ。</div>
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--line);">
-          <div class="step-title"><span class="step-num">2</span>「代理店コード」セクション</div>
+          <div class="step-title"><span class="step-num">2</span>「Resellerコード」セクション</div>
           <div class="step-body">
-            未紐付けの場合、入力欄が表示されます。代理店から通知されたコード（<span class="code">SUP-XXXXXX</span> または <span class="code">AGT-XXXXXX</span>）を入力。
+            未紐付けの場合、入力欄が表示されます。Resellerから通知されたコード（<span class="code">SUP-XXXXXX</span> または <span class="code">AGT-XXXXXX</span>）を入力。
           </div>
         </div>
         <div style="padding:10px 0;">
@@ -302,26 +302,26 @@
         <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;">
           <li>プロフィール確認（ログインID / スタッフID / 会社名 / メール）</li>
           <li>連携済みモジュール一覧・連携解除</li>
-          <li>代理店コードの後付け入力・紐付け状況確認</li>
+          <li>Resellerコードの後付け入力・紐付け状況確認</li>
           <li>パスワード変更（現行パスワード + 新パスワード8文字以上）</li>
         </ul>
       </section>
 
       <section class="card" id="partner">
-        <h2 class="panel-title">代理店向け <span class="role-chip role-chip--partner">PARTNER</span></h2>
+        <h2 class="panel-title">Reseller向け <span class="role-chip role-chip--partner">PARTNER</span></h2>
         <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
-          総代理店／代理店としてAdavooを販売する会社向けの操作です。<br>
-          代理店用のログイン画面は <span class="code">partner-login.html</span> にあり、エンドユーザー用の通常ログインとは<strong>完全に別系統</strong>です。
+          Master Reseller／ResellerとしてAdavooを販売する会社向けの操作です。<br>
+          Reseller用のログイン画面は <span class="code">partner-login.html</span> にあり、エンドユーザー用の通常ログインとは<strong>完全に別系統</strong>です。
         </p>
       </section>
 
       <section class="card" id="partner-login">
-        <h3 class="panel-title" style="font-size:15px;">① 代理店ログイン</h3>
+        <h3 class="panel-title" style="font-size:15px;">① Resellerログイン</h3>
         <div style="padding:10px 0;border-bottom:1px solid var(--line);">
-          <div class="step-title"><span class="step-num">1</span>代理店ログインページへ</div>
+          <div class="step-title"><span class="step-num">1</span>Resellerログインページへ</div>
           <div class="step-body">
             URL: <span class="code">https://adapt.tamjump.com/partner-login.html</span><br>
-            タムジ社（総代理店の場合）または上位の総代理店（代理店の場合）から通知されたログインIDとパスワードでログインします。
+            タムジ社（Master Resellerの場合）または上位のMaster Reseller（Resellerの場合）から通知されたログインIDとパスワードでログインします。
           </div>
         </div>
         <div style="padding:10px 0;">
@@ -331,7 +331,7 @@
           </div>
         </div>
         <div class="note">
-          代理店アカウントの契約が <strong>expired（期限切れ）</strong> または <strong>terminated（停止）</strong> 状態になるとログインできなくなります。
+          Resellerアカウントの契約が <strong>expired（期限切れ）</strong> または <strong>terminated（停止）</strong> 状態になるとログインできなくなります。
         </div>
       </section>
 
@@ -341,35 +341,35 @@
           ログイン直後に表示される画面で、自分の情報・パートナー／ご紹介先の状況・売上サマリーが一覧できます。
         </p>
         <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;">
-          <li><strong>サマリー</strong>：ご紹介先企業数、有料契約中、パートナー代理店数（総代理店のみ）、当月売上・按分後支払予定（総代理店のみ）</li>
-          <li><strong>代理店情報</strong>：自社コード・種別・契約期間・按分率（総代理店のみ）・ご担当の総代理店（代理店の場合）</li>
-          <li><strong>パートナー代理店</strong>（総代理店のみ）：パートナー代理店の一覧と状態</li>
-          <li><strong>ご紹介先企業</strong>：自分またはパートナー代理店に紐付くエンドユーザー一覧・スタッフ数・有料契約数</li>
+          <li><strong>サマリー</strong>：ご紹介先企業数、有料契約中、Reseller数（Master Resellerのみ）、当月売上・按分後支払予定（Master Resellerのみ）</li>
+          <li><strong>Reseller情報</strong>：自社コード・種別・契約期間・按分率（Master Resellerのみ）・ご担当の Master Reseller（Resellerの場合）</li>
+          <li><strong>Reseller</strong>（Master Resellerのみ）：Resellerの一覧と状態</li>
+          <li><strong>ご紹介先企業</strong>：自分またはResellerに紐付くエンドユーザー一覧・スタッフ数・有料契約数</li>
         </ul>
       </section>
 
       <section class="card" id="sub-agent">
-        <h3 class="panel-title" style="font-size:15px;">③ パートナー代理店の登録（総代理店のみ）</h3>
+        <h3 class="panel-title" style="font-size:15px;">③ Resellerの登録（Master Resellerのみ）</h3>
         <div style="padding:10px 0;border-bottom:1px solid var(--line);">
           <div class="step-title"><span class="step-num">1</span>登録ボタンをクリック</div>
           <div class="step-body">
-            パートナー代理店一覧の右上 <span class="code">＋ パートナー代理店を登録</span> から登録ダイアログを開きます。
+            Reseller一覧の右上 <span class="code">＋ Resellerを登録</span> から登録ダイアログを開きます。
           </div>
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--line);">
           <div class="step-title"><span class="step-num">2</span>情報入力</div>
           <div class="step-body">
-            代理店の会社名・ログインID・初期パスワード（8文字以上）・メール・電話番号を入力。
+            Resellerの会社名・ログインID・初期パスワード（8文字以上）・メール・電話番号を入力。
           </div>
         </div>
         <div style="padding:10px 0;">
           <div class="step-title"><span class="step-num">3</span>登録完了・相手先へ伝達</div>
           <div class="step-body">
-            代理店コード（<span class="code">AGT-XXXXXX</span>）が自動発行され、<strong>初期パスワードが1回だけ表示</strong>されます。必ずコピーして代理店担当者にお伝えください。
+            Resellerコード（<span class="code">AGT-XXXXXX</span>）が自動発行され、<strong>初期パスワードが1回だけ表示</strong>されます。必ずコピーしてReseller担当者にお伝えください。
           </div>
         </div>
         <div class="note">
-          パートナー代理店は登録時点から1年契約で <span class="code">active</span> 状態に。契約終了日の2ヶ月前に自動通知メールが届きます。
+          Resellerは登録時点から1年契約で <span class="code">active</span> 状態に。契約終了日の2ヶ月前に自動通知メールが届きます。
         </div>
       </section>
 
@@ -387,27 +387,27 @@
           <span class="code">管理</span> をクリックして <span class="code">admin-dashboard.html</span> を開くと、最上部に全体メトリクスが表示されます。
         </p>
         <ul style="padding-left:20px;color:var(--ink-muted);font-size:13px;line-height:1.9;">
-          <li>総代理店・代理店・エンドユーザーの登録数（稼働中／全体／承認待ち）</li>
+          <li>Master Reseller・Reseller・エンドユーザーの登録数（稼働中／全体／承認待ち）</li>
           <li>有料契約中のsubscription数</li>
           <li>当月売上・未払い支払予定・支払済金額</li>
         </ul>
       </section>
 
       <section class="card" id="admin-partner">
-        <h3 class="panel-title" style="font-size:15px;">② 代理店管理</h3>
+        <h3 class="panel-title" style="font-size:15px;">② Reseller管理</h3>
 
-        <p class="divider-label">総代理店の新規登録</p>
+        <p class="divider-label">Master Resellerの新規登録</p>
         <div style="padding:8px 0;border-bottom:1px solid var(--line);">
-          <div class="step-title"><span class="step-num">1</span>「＋ 総代理店を登録」ボタン</div>
+          <div class="step-title"><span class="step-num">1</span>「＋ Master Resellerを登録」ボタン</div>
           <div class="step-body">
-            代理店管理タブの右上から登録ダイアログを開きます。
+            Reseller管理タブの右上から登録ダイアログを開きます。
           </div>
         </div>
         <div style="padding:8px 0;border-bottom:1px solid var(--line);">
           <div class="step-title"><span class="step-num">2</span>情報入力</div>
           <div class="step-body">
             会社名・ログインID・初期パスワード・メール・電話・<strong>按分率（%）</strong>を入力。<br>
-            按分率 = タムジ売上総額のうち、この総代理店に支払う割合。
+            按分率 = タムジ売上総額のうち、このMaster Resellerに支払う割合。
           </div>
         </div>
         <div style="padding:8px 0;border-bottom:1px solid var(--line);">
@@ -438,7 +438,7 @@
         <div style="padding:8px 0;border-bottom:1px solid var(--line);">
           <div class="step-title"><span class="step-num">2</span>エントリ確認</div>
           <div class="step-body">
-            支払先総代理店コード・会社名・モジュール・売上総額・按分率・支払額が表示されます。
+            支払先Master Resellerコード・会社名・モジュール・売上総額・按分率・支払額が表示されます。
           </div>
         </div>
         <div style="padding:8px 0;">
@@ -448,7 +448,7 @@
           </div>
         </div>
         <div class="note">
-          <strong>原則：</strong>タムジは総代理店にのみ支払います。代理店経由の売上は上位総代理店コードに集約されて台帳に載るため、タムジ→代理店の直接支払いはありません（代理店への支払は総代理店の業務）。
+          <strong>原則：</strong>タムジはMaster Resellerにのみ支払います。Reseller経由の売上は上位Master Resellerコードに集約されて台帳に載るため、タムジ→Resellerの直接支払いはありません（Resellerへの支払はMaster Resellerの業務）。
         </div>
       </section>
 
@@ -472,16 +472,16 @@
             <div class="faq-a">不要です。連携時はパスワードを保存しておらず、以降は内部チケット方式で認証するため、モジュール側でパスワードを変更しても連携は維持されます。</div>
           </li>
           <li>
-            <div class="faq-q">代理店コードを間違えて入力してしまいました</div>
-            <div class="faq-a">代理店コードは一度確定すると変更できない仕様です。サポートまでお問い合わせください。</div>
+            <div class="faq-q">Resellerコードを間違えて入力してしまいました</div>
+            <div class="faq-a">Resellerコードは一度確定すると変更できない仕様です。サポートまでお問い合わせください。</div>
           </li>
           <li>
-            <div class="faq-q">代理店コードを後から入力することはできますか？</div>
-            <div class="faq-a">はい、アカウント画面から1回だけ入力できます。「⑤ 代理店コードを後から紐付ける」セクションをご参照ください。</div>
+            <div class="faq-q">Resellerコードを後から入力することはできますか？</div>
+            <div class="faq-a">はい、アカウント画面から1回だけ入力できます。「⑤ Resellerコードを後から紐付ける」セクションをご参照ください。</div>
           </li>
           <li>
-            <div class="faq-q">パートナー代理店の初期パスワードを再表示したいのですが</div>
-            <div class="faq-a">セキュリティ上、登録時の一度しか表示されません。ご案内し忘れた場合は代理店側でパスワード変更の操作をしてもらうか、別途リセット処理（Phase 4予定）をお待ちください。</div>
+            <div class="faq-q">Resellerの初期パスワードを再表示したいのですが</div>
+            <div class="faq-a">セキュリティ上、登録時の一度しか表示されません。ご案内し忘れた場合はReseller側でパスワード変更の操作をしてもらうか、別途リセット処理（Phase 4予定）をお待ちください。</div>
           </li>
           <li>
             <div class="faq-q">月次集計のタイミングはいつですか？</div>

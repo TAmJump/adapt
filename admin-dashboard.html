@@ -72,7 +72,7 @@
   <section class="page-intro">
     <p class="section-label">TAmJump Admin</p>
     <h1>タムジ管理画面</h1>
-    <p>代理店・売上・支払い台帳の全体管理</p>
+    <p>Reseller・売上・支払い台帳の全体管理</p>
   </section>
 
   <div class="stack">
@@ -86,7 +86,7 @@
     <!-- タブ -->
     <section class="card">
       <div class="tab-bar">
-        <button class="tab-btn active" data-tab="partners">代理店管理</button>
+        <button class="tab-btn active" data-tab="partners">Reseller管理</button>
         <button class="tab-btn" data-tab="requests">契約申請 <span id="reqBadge" style="display:none;background:#c4432b;color:#fff;border-radius:100px;padding:1px 7px;font-size:10px;margin-left:4px;">0</span></button>
         <button class="tab-btn" data-tab="invitations">招待管理</button>
         <button class="tab-btn" data-tab="notify">通知送信</button>
@@ -94,11 +94,11 @@
         <button class="tab-btn" data-tab="revenue">売上推移</button>
       </div>
 
-      <!-- 代理店管理タブ -->
+      <!-- Reseller管理タブ -->
       <div id="tab-partners">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h2 class="panel-title" style="margin:0;">代理店一覧</h2>
-          <button class="btn btn--primary btn--sm" id="addSuperBtn" type="button">＋ 総代理店を登録</button>
+          <h2 class="panel-title" style="margin:0;">Reseller一覧</h2>
+          <button class="btn btn--primary btn--sm" id="addSuperBtn" type="button">＋ Master Resellerを登録</button>
         </div>
         <div id="partnersContent"><p class="muted">読み込み中…</p></div>
       </div>
@@ -118,7 +118,7 @@
           <h2 class="panel-title" style="margin:0;">招待管理</h2>
           <div style="display:flex;gap:8px;">
             <button class="btn btn--ghost btn--sm" id="reloadInvBtn" type="button">再読み込み</button>
-            <button class="btn btn--primary btn--sm" id="newInviteBtn" type="button">＋ 総代理店を招待</button>
+            <button class="btn btn--primary btn--sm" id="newInviteBtn" type="button">＋ Master Resellerを招待</button>
           </div>
         </div>
         <div id="invitationsContent"><p class="muted">読み込み中…</p></div>
@@ -127,7 +127,7 @@
       <!-- 通知送信タブ（Phase 4-4） -->
       <div id="tab-notify" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h2 class="panel-title" style="margin:0;">代理店への通知送信</h2>
+          <h2 class="panel-title" style="margin:0;">Resellerへの通知送信</h2>
         </div>
         <div class="stack">
           <section style="border:1px solid #e3e3e0;border-radius:6px;padding:16px 18px;">
@@ -137,8 +137,8 @@
               <div class="field">
                 <label for="ntScope">宛先 <span class="req">*</span></label>
                 <select id="ntScope">
-                  <option value="all_active">全稼働中（総代理店+代理店）</option>
-                  <option value="all_supers">全総代理店（active のみ）</option>
+                  <option value="all_active">全稼働中（Master Reseller+Reseller）</option>
+                  <option value="all_supers">全Master Reseller（active のみ）</option>
                   <option value="individual">個別指定（partner_id を選ぶ）</option>
                 </select>
               </div>
@@ -256,7 +256,7 @@
   document.getElementById('reloadLedgerBtn').addEventListener('click', loadLedger);
   loadLedger();
 
-  // 総代理店登録
+  // Master Reseller登録
   document.getElementById('addSuperBtn').addEventListener('click', openAddSuperModal);
 
   // --- サマリー ---
@@ -269,12 +269,12 @@
       el.innerHTML = `
         <div class="metric-grid">
           <div class="metric">
-            <div class="metric__label">総代理店</div>
+            <div class="metric__label">Master Reseller</div>
             <div class="metric__value">${s.super_active}<span class="metric__unit">/ ${s.super_total}社</span></div>
             ${s.super_pending > 0 ? `<div style="font-size:11px; color:#92400e; margin-top:4px;">承認待ち ${s.super_pending}件</div>` : ''}
           </div>
           <div class="metric">
-            <div class="metric__label">代理店</div>
+            <div class="metric__label">Reseller</div>
             <div class="metric__value">${s.agent_active}<span class="metric__unit">/ ${s.agent_total}社</span></div>
           </div>
           <div class="metric">
@@ -302,24 +302,24 @@
     }
   }
 
-  // --- 代理店一覧 ---
+  // --- Reseller一覧 ---
   async function loadPartners() {
     const el = document.getElementById('partnersContent');
     try {
       const r = await AdaptAPI.call('/api/admin/partners');
       const list = r.partners || [];
       if (list.length === 0) {
-        el.innerHTML = `<p class="muted">まだ代理店が登録されていません。</p>`;
+        el.innerHTML = `<p class="muted">まだResellerが登録されていません。</p>`;
         return;
       }
-      // 総代理店と代理店を分けて表示
+      // Master ResellerとResellerを分けて表示
       const supers = list.filter(p => p.type === 'super');
       const agents = list.filter(p => p.type === 'agent');
 
       el.innerHTML = `
-        <h3 style="margin-top:8px;">総代理店 (${supers.length})</h3>
+        <h3 style="margin-top:8px;">Master Reseller (${supers.length})</h3>
         ${renderPartnerTable(supers, true)}
-        <h3 style="margin-top:24px;">代理店 (${agents.length})</h3>
+        <h3 style="margin-top:24px;">Reseller (${agents.length})</h3>
         ${renderPartnerTable(agents, false)}
       `;
 
@@ -361,7 +361,7 @@
           });
         });
       });
-      // Phase 4-3e: 代理店詳細ドリルダウン
+      // Phase 4-3e: Reseller詳細ドリルダウン
       el.querySelectorAll('[data-detail]').forEach(btn => {
         btn.addEventListener('click', () => {
           openPartnerDetailModal({
@@ -397,7 +397,7 @@
                 : `<td class="mono">${Adapt.escapeHTML(p.parent_partner_id || '-')}</td>`
               }
               <td class="mono">
-                ${isSuper ? `代理店 ${p.child_agent_count}社 / ` : ''}
+                ${isSuper ? `Reseller ${p.child_agent_count}社 / ` : ''}
                 ユーザー ${p.direct_customer_count}社
               </td>
               <td class="mono">${p.contract_start_at ? formatDate(p.contract_start_at) + ' 〜 ' + formatDate(p.contract_end_at) : '-'}</td>
@@ -461,7 +461,7 @@
       el.innerHTML = summaryHtml + `
         <table>
           <thead><tr>
-            <th>支払先コード</th><th>総代理店名</th><th>モジュール</th>
+            <th>支払先コード</th><th>Master Reseller名</th><th>モジュール</th>
             <th>売上</th><th>按分率</th><th>支払額</th>
             <th>状態</th><th>支払日</th><th>操作</th>
           </tr></thead>
@@ -543,14 +543,14 @@
     }
   }
 
-  // --- 総代理店登録モーダル ---
+  // --- Master Reseller登録モーダル ---
   function openAddSuperModal() {
     const wrap = document.getElementById('modalWrap');
     wrap.style.display = '';
     wrap.innerHTML = `
       <div class="modal-backdrop" id="modalBackdrop">
         <div class="modal">
-          <h3>総代理店を登録</h3>
+          <h3>Master Resellerを登録</h3>
           <p class="muted" style="font-size:12px; margin:0 0 12px 0;">
             登録後は <strong>承認待ち</strong> 状態になります。「承認」ボタンで契約開始となります。<br>
             初期パスワードは登録後に画面表示されますので、必ず控えてください。
@@ -572,7 +572,7 @@
                 <input id="supPassword" type="password" required minlength="8" />
                 <button type="button" class="pw-toggle" data-pw="supPassword">表示</button>
               </div>
-              <div class="hint">8文字以上（初回ログイン後に代理店側で変更）</div>
+              <div class="hint">8文字以上（初回ログイン後にReseller側で変更）</div>
             </div>
             <div class="field">
               <label for="supEmail">メール</label>
@@ -586,7 +586,7 @@
             <div class="field">
               <label for="supSharePct">按分率（%） <span class="req">*</span></label>
               <input id="supSharePct" type="number" min="0" max="100" step="0.1" value="30" />
-              <div class="hint">タムジ売上総額のうち、この総代理店に支払う割合</div>
+              <div class="hint">タムジ売上総額のうち、このMaster Resellerに支払う割合</div>
             </div>
           </form>
           <div class="modal-actions">
@@ -654,12 +654,12 @@
       <div class="modal-backdrop">
         <div class="modal">
           <h3>登録完了（承認待ち）</h3>
-          <p>総代理店を登録しました。以下の情報を相手先にお伝えください。</p>
+          <p>Master Resellerを登録しました。以下の情報を相手先にお伝えください。</p>
           <p class="muted" style="font-size:12px;">
-            現在は <strong>承認待ち</strong> 状態です。代理店一覧の「承認」ボタンを押すと契約開始となります。
+            現在は <strong>承認待ち</strong> 状態です。Reseller一覧の「承認」ボタンを押すと契約開始となります。
           </p>
           <div class="credentials-box">
-            <div>総代理店コード: <span class="mono">${Adapt.escapeHTML(partner.code)}</span></div>
+            <div>Master Resellerコード: <span class="mono">${Adapt.escapeHTML(partner.code)}</span></div>
             <div>ログインID: <span class="mono">${Adapt.escapeHTML(partner.login_id)}</span></div>
             <div>初期パスワード: <span class="mono">${Adapt.escapeHTML(plainPassword)}</span></div>
             <div>按分率: <span class="mono">${partner.revenue_share_pct != null ? partner.revenue_share_pct + '%' : '-'}</span></div>
@@ -668,7 +668,7 @@
             </div>
           </div>
           <p style="font-size:12px; color:#555;">
-            代理店側ログインURL: <br>
+            Reseller側ログインURL: <br>
             <span class="mono" style="word-break:break-all;">${location.origin}/partner-login.html</span>
           </p>
           <div class="modal-actions">
@@ -818,7 +818,7 @@
   function renderRequestCard(p, kind) {
     const requestedAt = kind === 'renewal' ? p.renewal_requested_at : p.terminate_requested_at;
     const note = kind === 'renewal' ? p.renewal_note : p.terminate_note;
-    const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+    const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
     const kindLabel = kind === 'renewal' ? '継続' : '終了';
     const borderColor = kind === 'renewal' ? '#15803d' : '#b45309';
     return `
@@ -857,7 +857,7 @@
       const r = await AdaptAPI.call('/api/admin/partner-invitations');
       const list = r.invitations || [];
       if (list.length === 0) {
-        el.innerHTML = `<p class="muted">発行済みの招待はありません。右上の「＋ 総代理店を招待」から発行してください。</p>`;
+        el.innerHTML = `<p class="muted">発行済みの招待はありません。右上の「＋ Master Resellerを招待」から発行してください。</p>`;
         return;
       }
       el.innerHTML = `
@@ -878,7 +878,7 @@
               return `
                 <tr>
                   <td>${Adapt.escapeHTML(inv.invited_email)}</td>
-                  <td>${inv.invited_role === 'super' ? '総代理店' : '代理店'}</td>
+                  <td>${inv.invited_role === 'super' ? 'Master Reseller' : 'Reseller'}</td>
                   <td>${inv.parent_company_name ? Adapt.escapeHTML(inv.parent_company_name) : '<span class="muted">タムジ社</span>'}</td>
                   <td class="mono">${inv.initial_contract_months}ヶ月</td>
                   <td class="mono">${inv.initial_revenue_share_pct != null ? inv.initial_revenue_share_pct + '%' : '-'}</td>
@@ -932,7 +932,7 @@
     wrap.innerHTML = `
       <div class="modal-backdrop" id="invBackdrop">
         <div class="modal">
-          <h3>総代理店を招待</h3>
+          <h3>Master Resellerを招待</h3>
           <p style="font-size:12px;color:#666;margin:0 0 12px 0;">
             指定したメールアドレスに招待URLが送信されます。受信者はフォームに会社情報等を入力して登録を申請できます。
           </p>
@@ -1050,8 +1050,8 @@
         }
 
         // 確認ダイアログ
-        const recipientDesc = scope === 'all_active' ? '全稼働中代理店'
-                            : scope === 'all_supers' ? '全総代理店'
+        const recipientDesc = scope === 'all_active' ? '全稼働中Reseller'
+                            : scope === 'all_supers' ? '全Master Reseller'
                             : `選択した${payload.partner_ids?.length || 0}件`;
         if (!confirm(`${recipientDesc}に通知を送信します。よろしいですか？\n\nタイトル: ${title}`)) return;
 
@@ -1059,7 +1059,7 @@
         btn.textContent = '送信中…';
         try {
           const r = await AdaptAPI.call('/api/admin/notify', { method: 'POST', body: payload });
-          msgEl.innerHTML = `<div class="msg msg--ok">${r.sent_count}件の代理店に送信しました</div>`;
+          msgEl.innerHTML = `<div class="msg msg--ok">${r.sent_count}件のResellerに送信しました</div>`;
           Adapt.toast(`通知を ${r.sent_count}件送信しました`, 'success');
           // フォームリセット
           document.getElementById('ntTitle').value = '';
@@ -1094,20 +1094,20 @@
       const r = await AdaptAPI.call('/api/admin/partners');
       const active = (r.partners || []).filter(p => p.status === 'active');
       if (active.length === 0) {
-        el.innerHTML = '<span class="muted">稼働中の代理店はありません</span>';
+        el.innerHTML = '<span class="muted">稼働中のResellerはありません</span>';
         return;
       }
       el.innerHTML = `
         <div style="margin-bottom:8px;display:flex;gap:8px;">
           <button type="button" class="btn btn--sm" id="ntSelectAll">全選択</button>
-          <button type="button" class="btn btn--sm" id="ntSelectSupers">総代理店のみ</button>
+          <button type="button" class="btn btn--sm" id="ntSelectSupers">Master Resellerのみ</button>
           <button type="button" class="btn btn--sm" id="ntSelectNone">全解除</button>
         </div>
         ${active.map(p => `
           <label style="display:block;padding:3px 4px;cursor:pointer;">
             <input type="checkbox" value="${Adapt.escapeHTML(p.partner_id)}" data-type="${p.type}" />
             <span class="mono">${Adapt.escapeHTML(p.partner_id)}</span>
-            <span style="font-size:11px;color:#666;margin-left:6px;">${p.type === 'super' ? '総代理店' : '代理店'}</span>
+            <span style="font-size:11px;color:#666;margin-left:6px;">${p.type === 'super' ? 'Master Reseller' : 'Reseller'}</span>
             <span style="margin-left:6px;">${Adapt.escapeHTML(p.company_name)}</span>
           </label>
         `).join('')}
@@ -1272,7 +1272,7 @@
           invalid_date: '発効日が不正です',
           note_too_long: '備考は500文字以内で入力してください',
           effective_before_contract: '発効日は契約開始日以降を指定してください',
-          not_super: '対象は総代理店のみです',
+          not_super: '対象はMaster Resellerのみです',
           partner_not_found: '対象が見つかりません'
         };
         msgEl.innerHTML = `<div class="msg msg--err">${errMap[e.message] || 'エラー: ' + e.message}</div>`;
@@ -1335,7 +1335,7 @@
   }
 
   // =====================================================
-  // Phase 4-3e: 代理店別ドリルダウンモーダル（admin 側）
+  // Phase 4-3e: Reseller別ドリルダウンモーダル（admin 側）
   // GET /api/admin/partners/:partner_id/detail
   // =====================================================
   async function openPartnerDetailModal({ partnerId, companyName }) {
@@ -1343,7 +1343,7 @@
     wrap.innerHTML = `
       <div class="modal-backdrop" id="detailBackdrop">
         <div class="modal" style="max-width:880px;">
-          <h3>代理店詳細 - ${Adapt.escapeHTML(partnerId)}</h3>
+          <h3>Reseller詳細 - ${Adapt.escapeHTML(partnerId)}</h3>
           <p style="font-size:12px;color:#666;margin:0 0 12px 0;">${Adapt.escapeHTML(companyName || '')}</p>
           <div id="detailContent"><p class="muted">読み込み中…</p></div>
           <div class="modal-actions">
@@ -1389,13 +1389,13 @@
         <section style="margin-bottom:16px;">
           <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">基本情報</h4>
           <table style="font-size:12px;">
-            <tr><th style="width:130px;">種別</th><td>${p.type === 'super' ? '総代理店' : '代理店'}</td></tr>
+            <tr><th style="width:130px;">種別</th><td>${p.type === 'super' ? 'Master Reseller' : 'Reseller'}</td></tr>
             <tr><th>コード / ログインID</th><td class="mono">${Adapt.escapeHTML(p.code)} / ${Adapt.escapeHTML(p.login_id)}</td></tr>
             <tr><th>メール / 電話</th><td>${Adapt.escapeHTML(p.email || '-')} / ${Adapt.escapeHTML(p.phone || '-')}</td></tr>
             <tr><th>契約期間</th><td class="mono">${p.contract_start_at ? formatDate(p.contract_start_at) + ' 〜 ' + formatDate(p.contract_end_at) : '未設定'}</td></tr>
             <tr><th>状態 / 按分率</th><td><span class="status-badge status-${p.status}">${statusLabel(p.status)}</span> / <strong>${p.revenue_share_pct != null ? p.revenue_share_pct + '%' : '-'}</strong></td></tr>
             <tr><th>振込先</th><td>${bankHtml}</td></tr>
-            ${p.parent_partner_id ? `<tr><th>ご担当の総代理店</th><td class="mono">${Adapt.escapeHTML(p.parent_partner_id)}</td></tr>` : ''}
+            ${p.parent_partner_id ? `<tr><th>ご担当の Master Reseller</th><td class="mono">${Adapt.escapeHTML(p.parent_partner_id)}</td></tr>` : ''}
           </table>
         </section>
 
@@ -1436,10 +1436,10 @@
           </table>`}
         </section>
 
-        <!-- パートナー代理店一覧 -->
+        <!-- Reseller一覧 -->
         <section style="margin-bottom:16px;">
-          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">パートナー代理店（${subAgents.length}）</h4>
-          ${subAgents.length === 0 ? '<p class="muted">パートナー代理店はまだいません。</p>' : `
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">Reseller（${subAgents.length}）</h4>
+          ${subAgents.length === 0 ? '<p class="muted">Resellerはまだいません。</p>' : `
           <table style="font-size:12px;">
             <thead><tr>
               <th>コード</th><th>会社名</th><th>ログインID</th><th>ご紹介先企業</th><th>契約終了</th><th>状態</th>
@@ -1464,7 +1464,7 @@
         <section>
           <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">
             ご紹介先企業（${customers.length}）
-            ${p.type === 'super' ? '<span style="font-size:11px;color:#666;font-weight:normal;margin-left:8px;">※直販＋パートナー代理店経由の合算</span>' : ''}
+            ${p.type === 'super' ? '<span style="font-size:11px;color:#666;font-weight:normal;margin-left:8px;">※直販＋Reseller経由の合算</span>' : ''}
           </h4>
           ${customers.length === 0 ? '<p class="muted">ご紹介先企業はまだいません。</p>' : `
           <div style="max-height:240px;overflow-y:auto;">

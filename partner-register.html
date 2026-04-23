@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>代理店新規登録｜Adavoo</title>
+<title>Reseller新規登録｜Adavoo</title>
 <link rel="stylesheet" href="assets/style.css?v=20260421" />
 <style>
   .register-wrap { max-width: 720px; margin: 40px auto; padding: 0 20px; }
@@ -40,7 +40,7 @@
 <main class="register-wrap">
   <section class="page-intro">
     <p class="section-label">Adavoo Partner Registration</p>
-    <h1>代理店 新規登録</h1>
+    <h1>Reseller 新規登録</h1>
   </section>
 
   <div id="progressBar" class="progress"></div>
@@ -135,7 +135,7 @@
     const area = document.getElementById('formArea');
     const d = state.data;
     const inv = state.invitation;
-    const roleLabel = inv.invited_role === 'super' ? '総代理店' : '代理店';
+    const roleLabel = inv.invited_role === 'super' ? 'Master Reseller' : 'Reseller';
 
     if (state.currentStep === 1) {
       area.innerHTML = `
@@ -288,7 +288,7 @@
       area.innerHTML = `
         <div class="step-card">
           <h2>4. 振込先情報</h2>
-          <p style="font-size:12px;color:#666;">${roleLabel === '総代理店' ? '月次の按分支払いはこの口座へお振込みいたします。' : '情報は招待元の総代理店が参照します。'}</p>
+          <p style="font-size:12px;color:#666;">${roleLabel === 'Master Reseller' ? '月次の按分支払いはこの口座へお振込みいたします。' : '情報は招待元のMaster Resellerが参照します。'}</p>
           <div id="msg4"></div>
           <div class="two-col">
             <div class="field">
@@ -360,7 +360,7 @@
             <li><label><input type="checkbox" id="cTerms"${cs.terms?' checked':''}> 利用規約 に同意する <a class="read-more" href="terms.html#terms" target="_blank" rel="noopener">確認</a></label></li>
             <li><label><input type="checkbox" id="cAnti"${cs.antisocial?' checked':''}> 反社会的勢力の排除に関する条項 に同意する <a class="read-more" href="terms.html#antisocial" target="_blank" rel="noopener">確認</a></label></li>
             <li><label><input type="checkbox" id="cPriv"${cs.privacy?' checked':''}> 個人情報保護方針 に同意する <a class="read-more" href="terms.html#privacy" target="_blank" rel="noopener">確認</a></label></li>
-            <li><label><input type="checkbox" id="cAgr"${cs.agreement?' checked':''}> 代理店契約書 に同意する <a class="read-more" href="terms.html#agreement" target="_blank" rel="noopener">確認</a></label></li>
+            <li><label><input type="checkbox" id="cAgr"${cs.agreement?' checked':''}> Reseller契約書 に同意する <a class="read-more" href="terms.html#agreement" target="_blank" rel="noopener">確認</a></label></li>
           </ul>
           <div class="nav-actions">
             <button class="btn" id="backBtn" type="button">戻る</button>

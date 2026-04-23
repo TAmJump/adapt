@@ -25,7 +25,7 @@
     </section>
 
     <section class="card">
-      <h2 class="panel-title">代理店コード</h2>
+      <h2 class="panel-title">Resellerコード</h2>
       <div id="partnerCodeContent"></div>
     </section>
 
@@ -82,7 +82,7 @@
     <tr><th>会社名</th><td>${Adapt.escapeHTML(c.name || '-')}</td></tr>
   `;
 
-  // ---------- 代理店コードセクション ----------
+  // ---------- Resellerコードセクション ----------
   renderPartnerCode(c);
 
   function renderPartnerCode(company) {
@@ -98,7 +98,7 @@
           <tr><th>確定日時</th><td class="mono">${formatDate(locked)}</td></tr>
         </table>
         <p class="muted" style="margin-top:10px; font-size:12px;">
-          代理店コードは一度確定すると変更できません。
+          Resellerコードは一度確定すると変更できません。
         </p>
       `;
       return;
@@ -107,17 +107,17 @@
     // 未確定：1回のみ入力可
     el.innerHTML = `
       <p class="muted" style="margin-bottom:12px;">
-        代理店から案内されたコードがある場合のみ入力してください。<br>
+        Resellerから案内されたコードがある場合のみ入力してください。<br>
         <strong>入力後は変更できません。</strong>未入力のままでも問題ありません（タムジ直販として扱われます）。
       </p>
       <div id="pcMsg"></div>
       <form id="pcForm" class="stack" style="max-width:440px;">
         <div class="field">
-          <label for="pcInput">代理店コード</label>
+          <label for="pcInput">Resellerコード</label>
           <input id="pcInput" type="text" autocomplete="off" maxlength="10"
                  style="text-transform:uppercase;"
                  placeholder="例: SUP-000001 / AGT-000001" />
-          <div class="hint">形式：SUP-XXXXXX（総代理店）または AGT-XXXXXX（代理店）</div>
+          <div class="hint">形式：SUP-XXXXXX（Master Reseller）または AGT-XXXXXX（Reseller）</div>
         </div>
         <div>
           <button class="btn btn--primary" id="pcBtn" type="submit">紐付ける</button>
@@ -131,7 +131,7 @@
       e.preventDefault();
       pcMsg.innerHTML = '';
       const val = document.getElementById('pcInput').value.trim().toUpperCase();
-      if (!val) { pcMsg.innerHTML = '<div class="msg msg--err">代理店コードを入力してください。</div>'; return; }
+      if (!val) { pcMsg.innerHTML = '<div class="msg msg--err">Resellerコードを入力してください。</div>'; return; }
       if (!confirm(val + ' を紐付けます。\n一度確定すると変更できません。よろしいですか？')) return;
       pcBtn.disabled = true;
       pcBtn.textContent = '送信中…';
@@ -146,14 +146,14 @@
           partner_code_locked_at: r.partner_code_locked_at
         });
         renderPartnerCode(updated);
-        Adapt.toast('代理店コードを紐付けました', 'success');
+        Adapt.toast('Resellerコードを紐付けました', 'success');
       } catch (err) {
         const map = {
-          invalid_partner_code_format: '代理店コードの形式が正しくありません（SUP-XXXXXX / AGT-XXXXXX）。',
-          partner_code_not_found: '入力された代理店コードは存在しません。',
-          partner_code_inactive: 'この代理店コードは現在利用できません。',
-          partner_code_already_locked: 'すでに代理店コードが紐付け済みです。',
-          missing_fields: '代理店コードを入力してください。'
+          invalid_partner_code_format: 'Resellerコードの形式が正しくありません（SUP-XXXXXX / AGT-XXXXXX）。',
+          partner_code_not_found: '入力されたResellerコードは存在しません。',
+          partner_code_inactive: 'このResellerコードは現在利用できません。',
+          partner_code_already_locked: 'すでにResellerコードが紐付け済みです。',
+          missing_fields: 'Resellerコードを入力してください。'
         };
         pcMsg.innerHTML = `<div class="msg msg--err">${map[err.message] || 'エラー: ' + err.message}</div>`;
       } finally {

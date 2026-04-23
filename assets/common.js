@@ -62,7 +62,7 @@ const AdaptAPI = {
 };
 
 /* ---------------------------------------------------------
-   PartnerAPI: 代理店ログイン用（master_staff とは完全分離）
+   PartnerAPI: Resellerログイン用（master_staff とは完全分離）
    - トークンは localStorage の 'adapt_partner_token' に保存
    - 送信時は X-Partner-Authorization: Bearer XXX ヘッダを使用
    --------------------------------------------------------- */
@@ -192,7 +192,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   });
 }
 
-// 代理店画面用ヘッダー（Adavoo 通常ヘッダーとは別系統・PartnerAPIを使用）
+// Reseller画面用ヘッダー（Adavoo 通常ヘッダーとは別系統・PartnerAPIを使用）
 function renderPartnerHeader({ active = '' } = {}) {
   const p = PartnerAPI.getPartner();
 
@@ -203,7 +203,7 @@ function renderPartnerHeader({ active = '' } = {}) {
     <button id="partnerLogoutBtn" type="button">ログアウト</button>
   `;
 
-  const typeLabel = p?.type === 'super' ? '総代理店' : p?.type === 'agent' ? '代理店' : '';
+  const typeLabel = p?.type === 'super' ? 'Master Reseller' : p?.type === 'agent' ? 'Reseller' : '';
 
   const headerHtml = `
     <header class="hdr">
@@ -223,7 +223,7 @@ function renderPartnerHeader({ active = '' } = {}) {
   })();
   holder.outerHTML = `<div id="adapt-header">${headerHtml}</div>`;
 
-  // ログイン情報バー（代理店コード＋会社名）
+  // ログイン情報バー（Resellerコード＋会社名）
   const existingWhoBar = document.getElementById('adapt-whobar');
   if (existingWhoBar) existingWhoBar.remove();
   if (p) {

@@ -241,7 +241,7 @@ async function audit(db, type, staffId, loginId, details, request) {
 }
 
 // =========================================================
-//  代理店（partners）認証
+//  Reseller（partners）認証
 //  - 独立ヘッダ X-Partner-Authorization: Bearer <token> を使用
 //  - master_staff の sessions とは完全分離（partner_sessions）
 // =========================================================
@@ -274,13 +274,13 @@ async function requireTamjAdmin(request, db) {
   return r;
 }
 
-// 代理店コード形式チェック: SUP-XXXXXX (総代理店) / AGT-XXXXXX (代理店)
+// Resellerコード形式チェック: SUP-XXXXXX (Master Reseller) / AGT-XXXXXX (Reseller)
 const PARTNER_CODE_RE = /^(SUP|AGT)-\d{6}$/;
 function isValidPartnerCodeFormat(code) {
   return typeof code === 'string' && PARTNER_CODE_RE.test(code);
 }
 
-// 代理店コードの存在＋active確認
+// Resellerコードの存在＋active確認
 async function lookupActivePartnerByCode(db, code) {
   return await db.prepare(
     "SELECT partner_id, type, code, company_name, status FROM partners WHERE code = ?"
@@ -302,7 +302,7 @@ const nextStaffId = async (db) => {
   return 'ADP-STF-' + String(n).padStart(6, '0');
 };
 
-// 代理店（AGT-XXXXXX）の次の連番 — 総代理店がパートナー代理店を登録する際に使用
+// Reseller（AGT-XXXXXX）の次の連番 — Master ResellerがResellerを登録する際に使用
 const nextAgentId = async (db) => {
   const row = await db.prepare(
     "SELECT partner_id FROM partners WHERE type = 'agent' AND partner_id LIKE 'AGT-%' ORDER BY partner_id DESC LIMIT 1"
@@ -311,7 +311,7 @@ const nextAgentId = async (db) => {
   return 'AGT-' + String(n).padStart(6, '0');
 };
 
-// 総代理店（SUP-XXXXXX）の次の連番 — タムジが総代理店を登録する際に使用
+// Master Reseller（SUP-XXXXXX）の次の連番 — タムジがMaster Resellerを登録する際に使用
 const nextSuperId = async (db) => {
   const row = await db.prepare(
     "SELECT partner_id FROM partners WHERE type = 'super' AND partner_id LIKE 'SUP-%' ORDER BY partner_id DESC LIMIT 1"
@@ -446,8 +446,8 @@ const todayJSTDate = () => {
 //  Cron (ledger_monthly_close) と手動再集計APIから共通利用
 //
 //  設計書§12.5 の原則:
-//   - タムジは総代理店にしか支払わない
-//   - 代理店経由の売上は上位の総代理店コードで集約
+//   - タムジはMaster Resellerにしか支払わない
+//   - Reseller経由の売上は上位のMaster Resellerコードで集約
 //   - タムジ直販（partner_code=NULL）は台帳に入れない
 // =========================================================
 async function generateMonthlyLedger(db, yearMonth) {
@@ -477,7 +477,7 @@ async function generateMonthlyLedger(db, yearMonth) {
     "   AND (s.ended_at IS NULL OR s.ended_at >= ?)"
   ).bind(nextMonth, ymStart).all();
 
-  // partner_code → 上位総代理店コード のマッピング
+  // partner_code → 上位Master Resellerコード のマッピング
   // (agent の場合は parent_partner_id → partners.code を引く、superならそのまま)
   const allPartners = await db.prepare(
     "SELECT partner_id, code, type, parent_partner_id, revenue_share_pct FROM partners"
@@ -499,7 +499,7 @@ async function generateMonthlyLedger(db, yearMonth) {
     return null;
   };
 
-  // app_name × 支払先総代理店コード で集約
+  // app_name × 支払先Master Resellerコード で集約
   // share_history_id は同一 partner では同じなので集約時に一つ記録
   const bucket = {};
   const shareHistoryCache = {}; // partner_id → history record
@@ -599,7 +599,7 @@ async function runContractNotify2Month(db, env) {
     }
     try {
       const endDate = new Date(p.contract_end_at).toLocaleDateString('ja-JP');
-      const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+      const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
       const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
       await sendEmail(env, {
         to: p.email,
@@ -611,7 +611,7 @@ async function runContractNotify2Month(db, env) {
 現在の${typeLabel}契約は ${endDate} に終了予定です。
 
 ▼ 継続をご希望の場合
-代理店ダッシュボードにログインし、「アカウント設定」→「契約情報」
+Resellerダッシュボードにログインし、「アカウント設定」→「契約情報」
 の「継続を申請する」ボタンから申請してください。
 タムジ社の承認後、契約期間が +1年延長されます。
 
@@ -619,7 +619,7 @@ async function runContractNotify2Month(db, env) {
 同じく「アカウント設定」→「契約情報」の「終了を申請する」ボタン
 から申請してください。タムジ社の承認後、契約が終了します。
 
-代理店ログイン: ${baseUrl}/partner-login.html
+Resellerログイン: ${baseUrl}/partner-login.html
 アカウント設定: ${baseUrl}/partner-account.html（ログイン後に開けます）
 
 ご不明な点は no-reply@tamjump.com までお問い合わせください。
@@ -772,7 +772,7 @@ async function runRecurringPartnerCheck(db, env) {
   try {
     const listText = targets.map(p => {
       const approvedYMD = new Date(p.approved_at).toISOString().slice(0, 10);
-      const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+      const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
       return `・${p.partner_id} (${typeLabel} / ${p.company_name})  承認日: ${approvedYMD}`;
     }).join('\n');
 
@@ -782,12 +782,12 @@ async function runRecurringPartnerCheck(db, env) {
       text:
 `タムジ社 管理者 各位
 
-承認から約1年が経過した代理店の反社再チェックをお願いいたします。
+承認から約1年が経過したResellerの反社再チェックをお願いいたします。
 対象は以下の ${targets.length} 件です：
 
 ${listText}
 
-管理画面から各代理店の情報を確認し、必要に応じて反社チェック結果を記録してください。
+管理画面から各Resellerの情報を確認し、必要に応じて反社チェック結果を記録してください。
 ${baseUrl}/admin-dashboard.html
 
 --
@@ -885,7 +885,7 @@ export default {
           return json({ error: 'invalid_email' }, 400, cors);
         }
 
-        // 代理店コードが入力されている場合のバリデーション（任意項目）
+        // Resellerコードが入力されている場合のバリデーション（任意項目）
         let normalizedPartnerCode = null;
         if (partner_code && String(partner_code).trim() !== '') {
           const code = String(partner_code).trim().toUpperCase();
@@ -987,8 +987,8 @@ ${verifyUrl}
         const sessionToken = randomId(48);
         const expiresAt = plusSec(60 * 60 * 24 * 30);
 
-        // 代理店コードが pending_data にあり、かつ現時点でもactiveであるか最終確認
-        // （登録からverifyまでの間に代理店が終了する稀なケースを救済）
+        // Resellerコードが pending_data にあり、かつ現時点でもactiveであるか最終確認
+        // （登録からverifyまでの間にResellerが終了する稀なケースを救済）
         let partnerCodeToPersist = null;
         if (p.partner_code) {
           const p2 = await lookupActivePartnerByCode(db, p.partner_code);
@@ -1462,9 +1462,9 @@ ${resetUrl}
         return json({ ok: true, app_name: row.app_name, child_login_id: row.child_login_id, master_staff: staff }, 200, cors);
       }
 
-      // =============== 代理店コード（エンドユーザー側：後付け入力） ===============
+      // =============== Resellerコード（エンドユーザー側：後付け入力） ===============
 
-      // エンドユーザーが後から代理店コードを紐付ける（1回のみ・以後変更不可）
+      // エンドユーザーが後からResellerコードを紐付ける（1回のみ・以後変更不可）
       if (path === '/api/company/claim-partner-code' && method === 'POST') {
         const r = await requireAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -1511,9 +1511,9 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // =============== 代理店（partner）認証系 ===============
+      // =============== Reseller（partner）認証系 ===============
 
-      // 代理店ログイン
+      // Resellerログイン
       if (path === '/api/partner/login' && method === 'POST') {
         const { login_id, password } = (await request.json()) || {};
         if (!login_id || !password) return json({ error: 'missing_fields' }, 400, cors);
@@ -1561,7 +1561,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // 代理店ログアウト
+      // Resellerログアウト
       if (path === '/api/partner/logout' && method === 'POST') {
         const auth = request.headers.get('X-Partner-Authorization') || '';
         if (auth.startsWith('Bearer ')) {
@@ -1573,12 +1573,12 @@ ${resetUrl}
         return json({ ok: true }, 200, cors);
       }
 
-      // 代理店情報取得
+      // Reseller情報取得
       if (path === '/api/partner/me' && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
         const p = r.partner;
-        // 親総代理店情報（agentの場合のみ）
+        // 親Master Reseller情報（agentの場合のみ）
         let parent = null;
         if (p.type === 'agent' && p.parent_partner_id) {
           parent = await db.prepare(
@@ -1617,7 +1617,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // Phase 4-3c: 代理店自身による自己情報の更新（email / phone / bank_info）
+      // Phase 4-3c: Reseller自身による自己情報の更新（email / phone / bank_info）
       // 会社名・種別・契約期間・按分率・login_id は編集不可（タムジ管理者のみ）
       if (path === '/api/partner/me' && method === 'PUT') {
         const r = await requirePartnerAuth(request, db);
@@ -1716,7 +1716,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // =============== Phase 4-3d: 契約継続/終了の代理店申請 ===============
+      // =============== Phase 4-3d: 契約継続/終了のReseller申請 ===============
 
       // 継続申請
       if (path === '/api/partner/renewal-request' && method === 'POST') {
@@ -1914,7 +1914,7 @@ ${resetUrl}
         return json({ ok: true, read_count: res.meta?.changes || 0 }, 200, cors);
       }
 
-      // super → パートナー代理店への通知送信
+      // super → Resellerへの通知送信
       if (path === '/api/partner/notify' && method === 'POST') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -1960,9 +1960,9 @@ ${resetUrl}
         return json({ ok: true, sent_count: validIds.length, recipient_ids: validIds }, 200, cors);
       }
 
-      // =============== 代理店パスワード変更・リセット（Phase 4-2） ===============
+      // =============== Resellerパスワード変更・リセット（Phase 4-2） ===============
 
-      // ログイン中の代理店によるパスワード変更
+      // ログイン中のResellerによるパスワード変更
       //  - 現在のパスワード検証 + 新パスワードで上書き
       //  - 他セッションを全破棄（現在のセッションは維持）
       if (path === '/api/partner/change-password' && method === 'POST') {
@@ -1997,7 +1997,7 @@ ${resetUrl}
         return json({ ok: true }, 200, cors);
       }
 
-      // パスワードリセットのリクエスト（代理店）
+      // パスワードリセットのリクエスト（Reseller）
       //  - email 存在不問で常に 200 OK（アカウント列挙攻撃対策）
       //  - partners.email に対して送信
       if (path === '/api/partner/password-reset-request' && method === 'POST') {
@@ -2041,7 +2041,7 @@ ${resetUrl}
             text:
 `${p.company_name} 御中
 
-Adavoo 代理店アカウントのパスワード再設定リクエストを受け付けました。
+Adavoo Resellerアカウントのパスワード再設定リクエストを受け付けました。
 以下のURLを開いて、新しいパスワードを設定してください。
 
 ${resetUrl}
@@ -2162,11 +2162,11 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // =============== 代理店ダッシュボード ===============
+      // =============== Resellerダッシュボード ===============
 
       // ダッシュボード用サマリー集計
-      //   総代理店: 自分のコード + パートナー代理店コード に紐づくエンドユーザー/売上
-      //   代理店  : 自分のコードのみに紐づくエンドユーザー/売上
+      //   Master Reseller: 自分のコード + Resellerコード に紐づくエンドユーザー/売上
+      //   Reseller  : 自分のコードのみに紐づくエンドユーザー/売上
       if (path === '/api/partner/dashboard' && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -2181,7 +2181,7 @@ ${resetUrl}
           ).bind(p.partner_id).all();
           const subCodes = (subs.results || []).map(x => x.code);
           codes = codes.concat(subCodes);
-          // active のパートナー代理店のみカウント
+          // active のResellerのみカウント
           const activeSubs = await db.prepare(
             "SELECT COUNT(*) AS cnt FROM partners WHERE parent_partner_id = ? AND status = 'active'"
           ).bind(p.partner_id).first();
@@ -2201,7 +2201,7 @@ ${resetUrl}
         ).bind(...codes).first();
         const activeSubscriptionCount = activeSubsCountRow?.cnt || 0;
 
-        // 当月の売上台帳（revenue_ledger）— 総代理店の場合は自分のコードで集計（代理店経由分も集約されている）
+        // 当月の売上台帳（revenue_ledger）— Master Resellerの場合は自分のコードで集計（Reseller経由分も集約されている）
         const ym = new Date().toISOString().slice(0, 7); // YYYY-MM
         let ledgerSummary = null;
         if (p.type === 'super') {
@@ -2231,14 +2231,14 @@ ${resetUrl}
             customer_count: customerCount,
             active_subscription_count: activeSubscriptionCount,
             sub_agent_count: p.type === 'super' ? subAgentCount : null,
-            current_month_ledger: ledgerSummary  // 代理店はnull（タムジは総代理店にしか支払わないため）
+            current_month_ledger: ledgerSummary  // Resellerはnull（タムジはMaster Resellerにしか支払わないため）
           }
         }, 200, cors);
       }
 
       // ご紹介先企業一覧
-      //   総代理店: 自コード + パートナー代理店コード に紐づく master_companies
-      //   代理店  : 自コードに紐づく master_companies
+      //   Master Reseller: 自コード + Resellerコード に紐づく master_companies
+      //   Reseller  : 自コードに紐づく master_companies
       if (path === '/api/partner/customers' && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -2274,14 +2274,14 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // パートナー代理店一覧（総代理店のみ）
+      // Reseller一覧（Master Resellerのみ）
       if (path === '/api/partner/sub-agents' && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
         const p = r.partner;
         if (p.type !== 'super') return json({ error: 'forbidden_super_only' }, 403, cors);
 
-        // 各代理店のご紹介先企業数と現行按分率（super→agent scope）をまとめて返す
+        // 各Resellerのご紹介先企業数と現行按分率（super→agent scope）をまとめて返す
         const today = todayJSTDate();
         const rows = await db.prepare(
           "SELECT a.partner_id, a.code, a.company_name, a.login_id, a.email, a.phone, " +
@@ -2301,7 +2301,7 @@ ${resetUrl}
         return json({ ok: true, sub_agents: rows.results || [] }, 200, cors);
       }
 
-      // パートナー代理店を新規登録（総代理店のみ）
+      // Resellerを新規登録（Master Resellerのみ）
       if (path === '/api/partner/sub-agents' && method === 'POST') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -2328,7 +2328,7 @@ ${resetUrl}
         const agentId = await nextAgentId(db);
         const passwordHash = await sha256(password);
         const now = nowISO();
-        // 代理店の契約期間は登録日から1年（総代理店の残り期間に合わせるロジックはPhase 3c以降で検討）
+        // Resellerの契約期間は登録日から1年（Master Resellerの残り期間に合わせるロジックはPhase 3c以降で検討）
         const oneYearLater = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
         await db.prepare(
@@ -2361,7 +2361,7 @@ ${resetUrl}
 
       // =============== Phase 4-3a: super→agent 按分率管理 ===============
 
-      // Phase 4-3e: 特定パートナー代理店のご紹介先企業一覧（super のみ）
+      // Phase 4-3e: 特定Resellerのご紹介先企業一覧（super のみ）
       const partnerSubCustomersMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/customers$/);
       if (partnerSubCustomersMatch && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
@@ -2397,7 +2397,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // パートナー代理店の按分率履歴を取得（super のみ）
+      // Resellerの按分率履歴を取得（super のみ）
       const partnerSubShareHistoryMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/share-history$/);
       if (partnerSubShareHistoryMatch && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
@@ -2449,7 +2449,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // パートナー代理店の按分率を変更（super のみ）
+      // Resellerの按分率を変更（super のみ）
       const partnerSubShareSetMatch = path.match(/^\/api\/partner\/sub-agents\/([A-Z]{3}-\d{6})\/share$/);
       if (partnerSubShareSetMatch && method === 'POST') {
         const r = await requirePartnerAuth(request, db);
@@ -2494,7 +2494,7 @@ ${resetUrl}
           return json({
             error: 'pct_exceeds_parent_share',
             parent_pct: parentPct,
-            message: `パートナー代理店への按分率は、自社の取得率（${parentPct}%）を超えて設定できません`
+            message: `Resellerへの按分率は、自社の取得率（${parentPct}%）を超えて設定できません`
           }, 400, cors);
         }
 
@@ -2602,7 +2602,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // 全代理店（総代理店＋代理店）一覧
+      // 全Reseller（Master Reseller＋Reseller）一覧
       if (path === '/api/admin/partners' && method === 'GET') {
         const r = await requireTamjAdmin(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -2621,7 +2621,7 @@ ${resetUrl}
 
       // =============== Phase 4-4: admin 通知送信 ===============
 
-      // admin → 総代理店への通知送信（複数宛先対応・パートナー代理店も指定可）
+      // admin → Master Resellerへの通知送信（複数宛先対応・Resellerも指定可）
       if (path === '/api/admin/notify' && method === 'POST') {
         const r = await requireTamjAdmin(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -2699,7 +2699,7 @@ ${resetUrl}
         return json({ ok: true, notifications: rows.results || [] }, 200, cors);
       }
 
-      // =============== Phase 4-3b: 代理店セルフ登録（招待フロー） ===============
+      // =============== Phase 4-3b: Resellerセルフ登録（招待フロー） ===============
 
       // [admin] 招待作成（admin→super）
       if (path === '/api/admin/partner-invitations' && method === 'POST') {
@@ -2734,9 +2734,9 @@ ${resetUrl}
         try {
           await sendEmail(env, {
             to: invited_email,
-            subject: '【Adavoo】総代理店ご登録のご案内 / TAmJ.Corp',
+            subject: '【Adavoo】Master Resellerご登録のご案内 / TAmJ.Corp',
             text:
-`この度は Adavoo 総代理店契約にご関心をお寄せいただきありがとうございます。
+`この度は Adavoo Master Reseller契約にご関心をお寄せいただきありがとうございます。
 
 以下のURLから登録手続きへお進みください。
 
@@ -2800,9 +2800,9 @@ https://tamjump.com/`
         try {
           await sendEmail(env, {
             to: invited_email,
-            subject: `【Adavoo】代理店ご登録のご案内 / ${r.partner.company_name}`,
+            subject: `【Adavoo】Resellerご登録のご案内 / ${r.partner.company_name}`,
             text:
-`この度は ${r.partner.company_name} 様経由で Adavoo 代理店契約にご関心をお寄せいただきありがとうございます。
+`この度は ${r.partner.company_name} 様経由で Adavoo Reseller契約にご関心をお寄せいただきありがとうございます。
 
 以下のURLから登録手続きへお進みください。
 
@@ -3161,9 +3161,9 @@ TAmJ.Corp`
             const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
             await sendEmail(env, {
               to: adminEmail,
-              subject: `【Adavoo】総代理店の新規登録申請: ${company_name}`,
+              subject: `【Adavoo】Master Resellerの新規登録申請: ${company_name}`,
               text:
-`総代理店の新規登録申請が届きました。
+`Master Resellerの新規登録申請が届きました。
 
 会社名: ${company_name}
 法人番号: ${corporate_number}
@@ -3182,11 +3182,11 @@ ${(env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '')}/admin-dashb
             if (parent?.email) {
               await sendEmail(env, {
                 to: parent.email,
-                subject: `【Adavoo】代理店の新規登録申請: ${company_name}`,
+                subject: `【Adavoo】Resellerの新規登録申請: ${company_name}`,
                 text:
 `${parent.company_name} 様
 
-貴社経由の代理店登録申請が届きました。
+貴社経由のReseller登録申請が届きました。
 
 会社名: ${company_name}
 法人番号: ${corporate_number}
@@ -3254,7 +3254,7 @@ TAmJ.Corp`
         return json({ ok: true, partner_id: partnerId }, 200, cors);
       }
 
-      // 総代理店を新規登録（status='pending' で登録、後で承認）
+      // Master Resellerを新規登録（status='pending' で登録、後で承認）
       if (path === '/api/admin/partners' && method === 'POST') {
         const r = await requireTamjAdmin(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -3306,7 +3306,7 @@ TAmJ.Corp`
         }, 200, cors);
       }
 
-      // 総代理店を承認（status: 'pending' → 'active'、契約期間確定）
+      // Master Resellerを承認（status: 'pending' → 'active'、契約期間確定）
       const approveMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/approve$/);
       if (approveMatch && method === 'POST') {
         const r = await requireTamjAdmin(request, db);
@@ -3396,7 +3396,7 @@ TAmJ.Corp`
             "SELECT company_name, email, type FROM partners WHERE partner_id = ?"
           ).bind(partnerId).first();
           if (pInfo?.email) {
-            const typeLabel = pInfo.type === 'super' ? '総代理店' : '代理店';
+            const typeLabel = pInfo.type === 'super' ? 'Master Reseller' : 'Reseller';
             const endDate = new Date(newEnd).toLocaleDateString('ja-JP');
             await sendEmail(env, {
               to: pInfo.email,
@@ -3451,7 +3451,7 @@ https://tamjump.com/`
 
         try {
           if (p.email) {
-            const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+            const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
             await sendEmail(env, {
               to: p.email,
               subject: `【Adavoo】継続申請について / ${p.company_name} 様`,
@@ -3506,7 +3506,7 @@ TAmJ.Corp`
 
         try {
           if (p.email) {
-            const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+            const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
             await sendEmail(env, {
               to: p.email,
               subject: `【Adavoo】契約終了のご連絡 / ${p.company_name} 様`,
@@ -3552,7 +3552,7 @@ TAmJ.Corp`
 
         try {
           if (p.email) {
-            const typeLabel = p.type === 'super' ? '総代理店' : '代理店';
+            const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
             await sendEmail(env, {
               to: p.email,
               subject: `【Adavoo】契約終了申請について / ${p.company_name} 様`,
@@ -3572,9 +3572,9 @@ TAmJ.Corp`
         return json({ ok: true, partner_id: partnerId }, 200, cors);
       }
 
-      // =============== Phase 4-3a: タムジ→総代理店 按分率管理 ===============
+      // =============== Phase 4-3a: タムジ→Master Reseller 按分率管理 ===============
 
-      // 総代理店詳細ドリルダウン（Phase 4-3e）
+      // Master Reseller詳細ドリルダウン（Phase 4-3e）
       const adminPartnerDetailMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/detail$/);
       if (adminPartnerDetailMatch && method === 'GET') {
         const r = await requireTamjAdmin(request, db);
@@ -3593,7 +3593,7 @@ TAmJ.Corp`
         let bankInfo = null;
         try { bankInfo = partner.bank_info_json ? JSON.parse(partner.bank_info_json) : null; } catch {}
 
-        // 対象 partner_code 群を決める（super の場合は自 + パートナー代理店）
+        // 対象 partner_code 群を決める（super の場合は自 + Reseller）
         const isSuper = partner.type === 'super';
         let ownerCodes = [partner.code];
         let subAgents = [];
@@ -3670,7 +3670,7 @@ TAmJ.Corp`
         }, 200, cors);
       }
 
-      // 総代理店の按分率履歴を取得
+      // Master Resellerの按分率履歴を取得
       const adminShareHistoryMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/share-history$/);
       if (adminShareHistoryMatch && method === 'GET') {
         const r = await requireTamjAdmin(request, db);
@@ -3713,7 +3713,7 @@ TAmJ.Corp`
         }, 200, cors);
       }
 
-      // 総代理店の按分率を変更
+      // Master Resellerの按分率を変更
       const adminShareSetMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/share$/);
       if (adminShareSetMatch && method === 'POST') {
         const r = await requireTamjAdmin(request, db);

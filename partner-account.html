@@ -47,7 +47,7 @@
 
   const isSuper = r.partner.type === 'super';
   document.getElementById('pageSubtitle').textContent =
-    (isSuper ? '総代理店' : '代理店') + ' / ' + r.partner.company_name;
+    (isSuper ? 'Master Reseller' : 'Reseller') + ' / ' + r.partner.company_name;
 
   let me;
   try {
@@ -84,16 +84,16 @@
       <section class="card">
         <h2 class="panel-title">アカウント情報</h2>
         <div class="info-grid">
-          <div class="lbl">${isSuper ? '総代理店コード' : '代理店コード'}</div>
+          <div class="lbl">${isSuper ? 'Master Resellerコード' : 'Resellerコード'}</div>
           <div class="val mono">${Adapt.escapeHTML(p.code)}</div>
           <div class="lbl">種別</div>
-          <div class="val">${isSuper ? '総代理店' : '代理店'}</div>
+          <div class="val">${isSuper ? 'Master Reseller' : 'Reseller'}</div>
           <div class="lbl">会社名</div>
           <div class="val">${Adapt.escapeHTML(p.company_name)}</div>
           <div class="lbl">ログインID</div>
           <div class="val mono">${Adapt.escapeHTML(p.login_id)}</div>
           ${p.parent ? `
-          <div class="lbl">ご担当の総代理店</div>
+          <div class="lbl">ご担当の Master Reseller</div>
           <div class="val"><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</div>
           ` : ''}
         </div>
@@ -151,7 +151,7 @@
           <div class="edit-actions">
             <button class="btn btn--sm" id="bankEditBtn" type="button">編集</button>
           </div>
-          <p class="edit-note">${isSuper ? '月次の按分支払いはこの振込先へ行われます。変更後は次回支払いから反映されます。' : 'パートナー代理店の場合、振込先はご担当の総代理店が参照します。'}</p>
+          <p class="edit-note">${isSuper ? '月次の按分支払いはこの振込先へ行われます。変更後は次回支払いから反映されます。' : 'Resellerの場合、振込先はご担当の Master Resellerが参照します。'}</p>
         </div>
         <form id="bankEditForm" class="stack" novalidate style="display:none;max-width:520px;">
           <div id="bankMsg"></div>
@@ -365,7 +365,7 @@
           unauthorized: 'セッションが切れています。再ログインしてください。',
           invalid_token: 'セッションが切れています。再ログインしてください。',
           expired: 'セッションの有効期限が切れています。再ログインしてください。',
-          partner_suspended: 'この代理店アカウントは利用停止中です。'
+          partner_suspended: 'このResellerアカウントは利用停止中です。'
         };
         msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
       } finally {

@@ -94,7 +94,7 @@
       });
 
       if (data.user_type === 'partner') {
-        // 代理店として認証成功 → PartnerAPI にトークン保存
+        // Resellerとして認証成功 → PartnerAPI にトークン保存
         PartnerAPI.setToken(data.token, data.expires_at);
         PartnerAPI.setPartner(data.partner);
         location.href = 'partner-dashboard.html';
@@ -109,7 +109,7 @@
         invalid_credentials: 'ログインIDまたはパスワードが違います。',
         pending_verification: 'メール確認が未完了です。登録時に送信されたメールのボタンを押してください。',
         account_suspended: 'このアカウントは停止されています。',
-        partner_suspended: 'この代理店アカウントは現在利用できません（契約終了・停止等）。',
+        partner_suspended: 'このResellerアカウントは現在利用できません（契約終了・停止等）。',
         missing_fields: '入力を確認してください。'
       };
       msg.innerHTML = `<div class="msg msg--err">${map[e.message] || 'エラー: ' + e.message}</div>`;
