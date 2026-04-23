@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>Resellerダッシュボード｜Adavoo</title>
+<title>ダッシュボード｜Adavoo Partner</title>
 <link rel="stylesheet" href="assets/style.css?v=20260421" />
 <style>
   .metric-grid {
@@ -79,7 +79,7 @@
 <main class="container">
   <section class="page-intro">
     <p class="section-label">Partner Dashboard</p>
-    <h1>Resellerダッシュボード</h1>
+    <h1 id="pageTitle">ダッシュボード</h1>
     <p id="pageSubtitle">読み込み中…</p>
   </section>
 
@@ -95,7 +95,7 @@
 
     <!-- 自分の情報 -->
     <section class="card">
-      <h2 class="panel-title">Reseller情報</h2>
+      <h2 class="panel-title" id="selfInfoTitle">アカウント情報</h2>
       <table id="selfTbl"></table>
     </section>
 
@@ -130,9 +130,15 @@
 
   const p = r.partner;
   const isSuper = p.type === 'super';
+  const roleLabel = isSuper ? 'Master Reseller' : 'Reseller';
+
+  // タイトルとセクション見出しをユーザー種別に応じて動的にセット
+  document.title = roleLabel + 'ダッシュボード｜Adavoo';
+  document.getElementById('pageTitle').textContent = roleLabel + 'ダッシュボード';
+  document.getElementById('selfInfoTitle').textContent = roleLabel + '情報';
 
   document.getElementById('pageSubtitle').textContent =
-    (isSuper ? 'Master Reseller' : 'Reseller') + ' / ' + p.company_name;
+    roleLabel + ' / ' + p.company_name;
 
   // --- 自分の情報テーブル ---
   document.getElementById('selfTbl').innerHTML = `
