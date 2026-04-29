@@ -1,10 +1,10 @@
 /**
  * =========================================================
- * Adavoo API Worker v2.0  (email-verified register + SES)
+ * やるゼ！ API Worker v2.0  (email-verified register + SES)
  *  Cloudflare Workers + D1 (adapt-db)
  *
  *  追加で必要な環境変数（Plaintext / Secret）:
- *    AWS_ACCESS_KEY_ID       = 既存Medvoo/Touchvooと同じでOK (Plaintext)
+ *    AWS_ACCESS_KEY_ID       = 既存ｍやるゼ！/ｔやるゼ！と同じでOK (Plaintext)
  *    AWS_SECRET_ACCESS_KEY   = 同上 (Secret推奨)
  *    AWS_REGION              = ap-northeast-1
  *    FROM_EMAIL              = no-reply@tamjump.com
@@ -137,12 +137,12 @@ function verifyEmailHtml({ name, verifyUrl, companyName }) {
 <body style="font-family: 'Helvetica Neue', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background:#ffffff; color:#0a0e1a; margin:0; padding:0;">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; margin:0 auto; padding:32px 20px;">
     <tr><td>
-      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">Adavoo</h1>
+      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">やるゼ！</h1>
       <p style="font-family:monospace; font-size:11px; color:#5a6070; letter-spacing:0.12em; text-transform:uppercase; margin:0 0 28px 0;">Email Verification</p>
       <h2 style="font-size:18px; font-weight:700; margin:0 0 14px 0;">メールアドレスを確認してください</h2>
       <p style="font-size:14px; line-height:1.8; color:#2a2f3d; margin:0 0 20px 0;">
         ${esc(name)} 様<br><br>
-        Adavooへのご登録ありがとうございます。<br>
+        やるゼ！へのご登録ありがとうございます。<br>
         以下のボタンを押して、メールアドレスの確認と登録完了をお願いします。
       </p>
       <table cellpadding="0" cellspacing="0" style="margin:8px 0 28px 0;"><tr>
@@ -175,12 +175,12 @@ function passwordResetEmailHtml({ name, resetUrl, loginId }) {
 <body style="font-family: 'Helvetica Neue', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background:#ffffff; color:#0a0e1a; margin:0; padding:0;">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; margin:0 auto; padding:32px 20px;">
     <tr><td>
-      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">Adavoo</h1>
+      <h1 style="font-size:22px; font-weight:900; margin:0 0 6px 0; letter-spacing:-0.01em;">やるゼ！</h1>
       <p style="font-family:monospace; font-size:11px; color:#5a6070; letter-spacing:0.12em; text-transform:uppercase; margin:0 0 28px 0;">Password Reset</p>
       <h2 style="font-size:18px; font-weight:700; margin:0 0 14px 0;">パスワード再設定のご案内</h2>
       <p style="font-size:14px; line-height:1.8; color:#2a2f3d; margin:0 0 20px 0;">
         ${esc(name)} 様<br><br>
-        Adavooアカウントのパスワード再設定リクエストを受け付けました。<br>
+        やるゼ！アカウントのパスワード再設定リクエストを受け付けました。<br>
         以下のボタンから新しいパスワードを設定してください。
       </p>
       <table cellpadding="0" cellspacing="0" style="margin:8px 0 28px 0;"><tr>
@@ -603,11 +603,11 @@ async function runContractNotify2Month(db, env) {
       const baseUrl = (env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '');
       await sendEmail(env, {
         to: p.email,
-        subject: `【Adavoo】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
+        subject: `【やるゼ！】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
         text:
 `${p.company_name} 様
 
-いつもAdavooをご利用いただきありがとうございます。
+いつもやるゼ！をご利用いただきありがとうございます。
 現在の${typeLabel}契約は ${endDate} に終了予定です。
 
 ▼ 継続をご希望の場合
@@ -778,7 +778,7 @@ async function runRecurringPartnerCheck(db, env) {
 
     await sendEmail(env, {
       to: adminEmail,
-      subject: `【Adavoo】反社再チェック対象 ${targets.length} 件（年次）`,
+      subject: `【やるゼ！】反社再チェック対象 ${targets.length} 件（年次）`,
       text:
 `タムジ社 管理者 各位
 
@@ -823,8 +823,8 @@ TAmJ.Corp
 // 利用可能なプラン一覧（Phase 3f初期版・ハードコード）
 // 将来的にはD1のテーブル化も検討（設計書 Phase 4 の宿題）
 const AVAILABLE_PLANS = [
-  { id: 'onetouch_pro',   app_name: 'onetouch', plan: 'pro',  name: 'Touchvoo Pro',  unit_price: 3000, description: '施設設備管理・QR台帳（IDあたり月額）' },
-  { id: 'medadapt_pro',   app_name: 'medadapt', plan: 'pro',  name: 'Medvoo Pro',       unit_price: 5000, description: '医療介護法人間連携OS（IDあたり月額）' }
+  { id: 'onetouch_pro',   app_name: 'onetouch', plan: 'pro',  name: 'ｔやるゼ！ Pro',  unit_price: 3000, description: '施設設備管理・QR台帳（IDあたり月額）' },
+  { id: 'medadapt_pro',   app_name: 'medadapt', plan: 'pro',  name: 'ｍやるゼ！ Pro',       unit_price: 5000, description: '医療介護法人間連携OS（IDあたり月額）' }
 ];
 
 // Square Webhook 署名検証
@@ -923,12 +923,12 @@ export default {
         try {
           await sendEmail(env, {
             to: email,
-            subject: '【Adavoo】メールアドレス確認のお願い',
+            subject: '【やるゼ！】メールアドレス確認のお願い',
             html: verifyEmailHtml({ name, verifyUrl, companyName: company_name }),
             text:
 `${name} 様
 
-Adavooへのご登録ありがとうございます。
+やるゼ！へのご登録ありがとうございます。
 以下のURLを開いて、メールアドレスの確認と登録完了をお願いします。
 
 ${verifyUrl}
@@ -1205,12 +1205,12 @@ ${verifyUrl}
         try {
           await sendEmail(env, {
             to: email,
-            subject: '【Adavoo】パスワード再設定のご案内',
+            subject: '【やるゼ！】パスワード再設定のご案内',
             html: passwordResetEmailHtml({ name: user.name, resetUrl, loginId: user.login_id }),
             text:
 `${user.name} 様
 
-Adavooアカウントのパスワード再設定リクエストを受け付けました。
+やるゼ！アカウントのパスワード再設定リクエストを受け付けました。
 以下のURLを開いて、新しいパスワードを設定してください。
 
 ${resetUrl}
@@ -1360,8 +1360,8 @@ ${resetUrl}
           } else {
             // Service Binding経由。ホスト名はダミー（Service Bindingが上書きする）
             // bodyは子API側のフィールド名差異を吸収するため3形式で送信
-            // - Touchvoo: loginId (camelCase)
-            // - Medvoo: email (ADM-/STF-プレフィックスのlogin_idもemailフィールドで受ける設計)
+            // - ｔやるゼ！: loginId (camelCase)
+            // - ｍやるゼ！: email (ADM-/STF-プレフィックスのlogin_idもemailフィールドで受ける設計)
             // - 予備: login_id (snake_case)
             var resp = await svc.fetch('https://internal' + loginPath, {
               method: 'POST',
@@ -2036,12 +2036,12 @@ ${resetUrl}
         try {
           await sendEmail(env, {
             to: email,
-            subject: '【Adavoo Partner Portal】パスワード再設定のご案内',
+            subject: '【やるゼ！ Partner Portal】パスワード再設定のご案内',
             html: passwordResetEmailHtml({ name: p.company_name, resetUrl, loginId: p.login_id }),
             text:
 `${p.company_name} 御中
 
-Adavoo Resellerアカウントのパスワード再設定リクエストを受け付けました。
+やるゼ！ Resellerアカウントのパスワード再設定リクエストを受け付けました。
 以下のURLを開いて、新しいパスワードを設定してください。
 
 ${resetUrl}
@@ -2734,9 +2734,9 @@ ${resetUrl}
         try {
           await sendEmail(env, {
             to: invited_email,
-            subject: '【Adavoo】Master Resellerご登録のご案内 / TAmJ.Corp',
+            subject: '【やるゼ！】Master Resellerご登録のご案内 / TAmJ.Corp',
             text:
-`この度は Adavoo Master Reseller契約にご関心をお寄せいただきありがとうございます。
+`この度は やるゼ！ Master Reseller契約にご関心をお寄せいただきありがとうございます。
 
 以下のURLから登録手続きへお進みください。
 
@@ -2800,9 +2800,9 @@ https://tamjump.com/`
         try {
           await sendEmail(env, {
             to: invited_email,
-            subject: `【Adavoo】Resellerご登録のご案内 / ${r.partner.company_name}`,
+            subject: `【やるゼ！】Resellerご登録のご案内 / ${r.partner.company_name}`,
             text:
-`この度は ${r.partner.company_name} 様経由で Adavoo Reseller契約にご関心をお寄せいただきありがとうございます。
+`この度は ${r.partner.company_name} 様経由で やるゼ！ Reseller契約にご関心をお寄せいただきありがとうございます。
 
 以下のURLから登録手続きへお進みください。
 
@@ -2865,7 +2865,7 @@ TAmJ.Corp`
         try {
           await sendEmail(env, {
             to: inv.invited_email,
-            subject: '【Adavoo・再送】ご登録のご案内',
+            subject: '【やるゼ！・再送】ご登録のご案内',
             text:
 `先日お送りしました登録のご案内を再送いたします。
 
@@ -3161,7 +3161,7 @@ TAmJ.Corp`
             const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
             await sendEmail(env, {
               to: adminEmail,
-              subject: `【Adavoo】Master Resellerの新規登録申請: ${company_name}`,
+              subject: `【やるゼ！】Master Resellerの新規登録申請: ${company_name}`,
               text:
 `Master Resellerの新規登録申請が届きました。
 
@@ -3182,7 +3182,7 @@ ${(env.BASE_URL || 'https://adapt.tamjump.com').replace(/\/+$/, '')}/admin-dashb
             if (parent?.email) {
               await sendEmail(env, {
                 to: parent.email,
-                subject: `【Adavoo】Resellerの新規登録申請: ${company_name}`,
+                subject: `【やるゼ！】Resellerの新規登録申請: ${company_name}`,
                 text:
 `${parent.company_name} 様
 
@@ -3237,7 +3237,7 @@ TAmJ.Corp`
           if (p.contact_email) {
             await sendEmail(env, {
               to: p.contact_email,
-              subject: `【Adavoo】ご登録申請について / ${p.company_name}`,
+              subject: `【やるゼ！】ご登録申請について / ${p.company_name}`,
               text:
 `${p.company_name} 様
 
@@ -3400,14 +3400,14 @@ TAmJ.Corp`
             const endDate = new Date(newEnd).toLocaleDateString('ja-JP');
             await sendEmail(env, {
               to: pInfo.email,
-              subject: `【Adavoo】契約継続のご承認 / ${pInfo.company_name} 様`,
+              subject: `【やるゼ！】契約継続のご承認 / ${pInfo.company_name} 様`,
               text:
 `${pInfo.company_name} 様
 
 ${typeLabel}契約の継続申請をご承認いたしました。
 新しい契約終了予定日: ${endDate}
 
-引き続き Adavoo をよろしくお願いいたします。
+引き続き やるゼ！ をよろしくお願いいたします。
 
 --
 TAmJ.Corp
@@ -3454,7 +3454,7 @@ https://tamjump.com/`
             const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
             await sendEmail(env, {
               to: p.email,
-              subject: `【Adavoo】継続申請について / ${p.company_name} 様`,
+              subject: `【やるゼ！】継続申請について / ${p.company_name} 様`,
               text:
 `${p.company_name} 様
 
@@ -3509,7 +3509,7 @@ TAmJ.Corp`
             const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
             await sendEmail(env, {
               to: p.email,
-              subject: `【Adavoo】契約終了のご連絡 / ${p.company_name} 様`,
+              subject: `【やるゼ！】契約終了のご連絡 / ${p.company_name} 様`,
               text:
 `${p.company_name} 様
 
@@ -3555,7 +3555,7 @@ TAmJ.Corp`
             const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
             await sendEmail(env, {
               to: p.email,
-              subject: `【Adavoo】契約終了申請について / ${p.company_name} 様`,
+              subject: `【やるゼ！】契約終了申請について / ${p.company_name} 様`,
               text:
 `${p.company_name} 様
 
@@ -4127,7 +4127,7 @@ TAmJ.Corp`
             }
           }
 
-          // invoice.payment_made → next_billing_at 更新（Adavoo側では決済完了の記録まで）
+          // invoice.payment_made → next_billing_at 更新（やるゼ！側では決済完了の記録まで）
           if (eventType === 'invoice.payment_made' && data?.invoice) {
             const inv = data.invoice;
             const subId = inv.subscription_id;

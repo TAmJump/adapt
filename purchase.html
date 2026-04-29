@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>モジュール購入｜Adavoo</title>
+<title>モジュール購入｜やるゼ！</title>
 <link rel="stylesheet" href="assets/style.css?v=20260421" />
 <style>
   .plan-grid {
@@ -256,7 +256,7 @@
       if (tokenResult.status !== 'OK') {
         throw new Error('カード情報のトークン化に失敗しました: ' + (tokenResult.errors?.[0]?.message || 'unknown'));
       }
-      // Adavoo Workerに送信（Worker側でSquare Subscriptions APIを呼び出す想定）
+      // やるゼ！ Workerに送信（Worker側でSquare Subscriptions APIを呼び出す想定）
       const r = await AdaptAPI.call('/api/subscriptions/create', {
         method: 'POST',
         body: {

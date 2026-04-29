@@ -1,7 +1,7 @@
 {
-  "name": "Adavoo",
-  "short_name": "Adavoo",
-  "description": "Adavooプラットフォーム（Touchvoo / Medvoo）親アプリ — Vision Of Oneness",
+  "name": "やるゼ！",
+  "short_name": "やるゼ！",
+  "description": "やるゼ！プラットフォーム（ｔやるゼ！ / ｍやるゼ！）親アプリ — Vision Of Oneness",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

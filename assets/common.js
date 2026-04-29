@@ -1,12 +1,12 @@
 /* =========================================================
-   Adavoo - Shared client utilities (v2)
+   やるゼ！ - Shared client utilities (v2)
    ========================================================= */
 
 window.ADAPT_CONFIG = {
   API_BASE: 'https://adapt-api.animalb001.workers.dev',
   APPS: {
     onetouch: {
-      name: 'Touchvoo',
+      name: 'ｔやるゼ！',
       desc: '施設設備の通報・管理会社連携・QR台帳。',
       accent: '#d4380d',
       url: 'https://tamjump.github.io/onetouch_app/login.html',
@@ -14,7 +14,7 @@ window.ADAPT_CONFIG = {
       tags: '施設設備管理'
     },
     medadapt: {
-      name: 'Medvoo',
+      name: 'ｍやるゼ！',
       desc: '医療・介護の法人間連携OS。NDA・退院通知・面談。',
       accent: '#0891b2',
       url: 'https://medadapt.scsgo.co.jp/app.html',
@@ -151,7 +151,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   const headerHtml = `
     <header class="hdr">
       <a href="index.html" class="hdr__brand">
-        Adavoo
+        やるゼ！
         <span class="hdr__brand-sub">Vision Of Oneness</span>
       </a>
       <nav class="hdr__nav">${navInner}</nav>
@@ -192,7 +192,7 @@ function renderHeader({ loggedIn = false, active = '' } = {}) {
   });
 }
 
-// Reseller画面用ヘッダー（Adavoo 通常ヘッダーとは別系統・PartnerAPIを使用）
+// Reseller画面用ヘッダー（やるゼ！ 通常ヘッダーとは別系統・PartnerAPIを使用）
 function renderPartnerHeader({ active = '' } = {}) {
   const p = PartnerAPI.getPartner();
 
@@ -208,7 +208,7 @@ function renderPartnerHeader({ active = '' } = {}) {
   const headerHtml = `
     <header class="hdr">
       <a href="partner-dashboard.html" class="hdr__brand">
-        Adavoo
+        やるゼ！
         <span class="hdr__brand-sub">Partner Portal</span>
       </a>
       <nav class="hdr__nav">${navInner}</nav>
