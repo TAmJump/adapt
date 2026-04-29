@@ -84,6 +84,7 @@
     return `
       <article class="app-card" data-app="${key}">
         <div class="app-card__head">
+          <img class="app-card__icon" src="${a.icon}" alt="${a.name}" loading="lazy">
           <h3 class="app-card__name">${a.name}</h3>
           <span class="app-card__badge ${linked ? 'badge--linked' : 'badge--unlinked'}">
             ${linked ? 'Linked' : 'Not linked'}

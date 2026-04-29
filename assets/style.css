@@ -324,7 +324,16 @@ input:focus, textarea:focus, select:focus {
 .app-card[data-disabled="true"] { opacity: 0.55; }
 .app-card[data-disabled="true"]:hover { box-shadow: none; }
 
-.app-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-card__head { display: flex; align-items: center; justify-content: flex-start; gap: 14px; }
+.app-card__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.app-card__head .app-card__name { flex: 1; }
 .app-card__badge {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
