@@ -10,15 +10,15 @@ window.ADAPT_CONFIG = {
       desc: '施設設備の通報・管理会社連携・QR台帳。',
       accent: '#d4380d',
       url: 'https://tamjump.github.io/onetouch_app/login.html',
-      lp:  'https://one-touch.tamjump.com',
+      lp:  'https://tyaruze.tamjump.com',
       tags: '施設設備管理'
     },
     medadapt: {
       name: 'ｍやるゼ！',
       desc: '医療・介護の法人間連携OS。NDA・退院通知・面談。',
       accent: '#0891b2',
-      url: 'https://medadapt.scsgo.co.jp/app.html',
-      lp:  'https://medadapt.scsgo.co.jp',
+      url: 'https://myaruze.tamjump.com/app.html',
+      lp:  'https://myaruze.tamjump.com',
       tags: '医療介護連携'
     }
   }

@@ -50,11 +50,11 @@
    - Database: `adapt-db`
 3. **Settings** → **Variables and Secrets** → Plaintext で以下を追加
    ```
-   ALLOWED_ORIGINS    = https://tamjump.github.io,https://adapt.tamjump.com,http://localhost:5500
+   ALLOWED_ORIGINS    = https://tamjump.github.io,https://yaruze.tamjump.com,http://localhost:5500
    ONETOUCH_API_BASE  = https://onetouch-api.animalb001.workers.dev
    MEDADAPT_API_BASE  = https://medadapt-api-v2.animalb001.workers.dev
    ONETOUCH_APP_URL   = https://tamjump.github.io/onetouch_app
-   MEDADAPT_APP_URL   = https://medadapt.scsgo.co.jp
+   MEDADAPT_APP_URL   = https://myaruze.tamjump.com
    ```
 4. **Edit code** → 既存コード全削除 → `assets/worker.js` を全貼り付け → **Deploy**
 5. 動作確認: `curl https://adapt-api.animalb001.workers.dev/api/health` → `{ "ok": true, ... }`
@@ -68,9 +68,9 @@
 ### 3-4. カスタムドメイン（任意・あとで）
 
 1. Cloudflare DNS → tamjump.com → CNAME `adapt` → `tamjump.github.io` / Proxy ON
-2. リポジトリ直下に `CNAME` ファイル作成（中身: `adapt.tamjump.com`）
-3. GitHub → Settings → Pages → Custom domain: `adapt.tamjump.com`
-4. Worker環境変数 `ALLOWED_ORIGINS` に `https://adapt.tamjump.com` を追加
+2. リポジトリ直下に `CNAME` ファイル作成（中身: `yaruze.tamjump.com`）
+3. GitHub → Settings → Pages → Custom domain: `yaruze.tamjump.com`
+4. Worker環境変数 `ALLOWED_ORIGINS` に `https://yaruze.tamjump.com` を追加
 
 ### 3-5. 動作確認
 
