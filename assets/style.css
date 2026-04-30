@@ -478,3 +478,59 @@ tr:last-child td { border-bottom: none; }
   .page-intro h1 { font-size: 26px; }
   .app-card { padding: 20px 22px; }
 }
+
+/* ---------- 狭幅モバイル（Pixel 7 等 412px 帯）専用 ---------- */
+@media (max-width: 480px) {
+  /* ヘッダー：ロゴサブを隠して nav を横スクロール可能化 */
+  .hdr { padding: 0 12px; height: 52px; }
+  .hdr__brand { font-size: 17px; gap: 6px; flex-shrink: 0; }
+  .hdr__brand-sub { display: none; }
+  .hdr__nav {
+    gap: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  .hdr__nav::-webkit-scrollbar { display: none; }
+  .hdr__nav a, .hdr__nav button {
+    font-size: 11.5px;
+    padding: 4px 1px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* who-bar：左パディングをヘッダーと揃える */
+  .who-bar { padding: 12px 14px 0; }
+  .hdr__who { font-size: 10px; word-break: break-all; }
+
+  /* 本文コンテナ */
+  .container { padding: 4px 14px 56px; }
+
+  /* page-intro：見出し縮小 + 折り返し */
+  .page-intro { margin-bottom: 24px; padding-bottom: 18px; }
+  .page-intro h1 { font-size: 22px; word-break: break-word; line-height: 1.25; }
+  .page-intro p { font-size: 12.5px; }
+
+  /* ランチャーカードを 1 列固定 + 余白を削って収める */
+  .launcher-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .app-card { padding: 16px 18px; }
+  .app-card__head { gap: 10px; }
+  .app-card__icon { width: 36px; height: 36px; }
+  .app-card__name { font-size: 15px; word-break: break-word; }
+  .app-card__badge { font-size: 9.5px; padding: 2px 6px; }
+  .app-card__desc { font-size: 11.5px; }
+  .app-card__actions { gap: 5px; }
+  .app-card__actions .btn { font-size: 11.5px; padding: 6px 10px; }
+  .app-card__meta { font-size: 10.5px; word-break: break-all; }
+
+  /* 認証画面 */
+  .auth-card { padding: 28px 18px; }
+
+  /* モーダル */
+  .modal { padding: 22px; }
+}
