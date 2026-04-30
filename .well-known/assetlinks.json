@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.tamjump.yaruze",
+    "sha256_cert_fingerprints": ["31:01:FC:8F:03:70:0F:47:37:7A:89:9D:64:E9:27:91:89:07:51:AD:26:8A:F3:9A:46:07:C1:BD:06:39:40:EB"]
+  }
+}]
