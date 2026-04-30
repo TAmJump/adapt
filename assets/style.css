@@ -557,4 +557,26 @@ tr:last-child td { border-bottom: none; }
 
   /* モーダル */
   .modal { padding: 22px; }
+
+  /* ---------- テーブル：縦書き化防止 + 横スクロール ---------- */
+  /* card 内の table は block 化して横スクロール可能に */
+  .card table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    white-space: nowrap;
+    border-collapse: collapse;
+  }
+  .card table thead,
+  .card table tbody { display: table; width: 100%; min-width: max-content; }
+  .card table th,
+  .card table td {
+    white-space: nowrap;
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+  /* スクロールバー: ヒント表示用に薄く */
+  .card table::-webkit-scrollbar { height: 6px; }
+  .card table::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 4px; }
 }

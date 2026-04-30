@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
 <title>タムジ管理画面｜やるゼ！</title>
-<link rel="stylesheet" href="assets/style.css?v=20260430b" />
+<link rel="stylesheet" href="assets/style.css?v=20260430c" />
 <style>
   .metric-grid {
     display: grid;
@@ -30,12 +30,22 @@
 
   .tab-bar {
     display: flex; gap: 4px; border-bottom: 1px solid var(--line, #e3e3e0); margin-bottom: 16px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn {
     background: none; border: 0; border-bottom: 2px solid transparent;
     padding: 10px 16px; cursor: pointer; font-size: 13px; color: #666;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .tab-btn.active { color: #c4432b; border-bottom-color: #c4432b; font-weight: 700; }
+  @media (max-width: 480px) {
+    .tab-btn { padding: 8px 11px; font-size: 12px; }
+  }
 
   .status-badge {
     display: inline-block; padding: 2px 8px; border-radius: 100px;
@@ -208,7 +218,7 @@
 
 <div id="modalWrap" style="display:none;"></div>
 
-<script src="assets/common.js?v=20260430b"></script>
+<script src="assets/common.js?v=20260430c"></script>
 <script>
 (async function () {
   const session = await Adapt.requireLogin('login.html');
