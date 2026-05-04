@@ -28,7 +28,7 @@
   .guide-menu-btn {
     display: none;
     position: fixed;
-    top: 120px;
+    top: 62px;
     right: 12px;
     z-index: 60;
     width: 44px;
@@ -57,6 +57,11 @@
 
   /* モバイル用：TOCをスライドインドロワーに */
   @media (max-width: 768px) {
+    /* page-intro：右上のハンバーガーボタンと被らないよう右余白を確保 */
+    .page-intro h1,
+    .page-intro p {
+      padding-right: 60px;
+    }
     .guide-layout {
       grid-template-columns: 1fr;
       gap: 16px;
