@@ -43,6 +43,44 @@
     flex-shrink: 0;
   }
   .tab-btn.active { color: #c4432b; border-bottom-color: #c4432b; font-weight: 700; }
+
+  /* ------ モバイル対応 ------ */
+  @media (max-width: 768px) {
+    /* メトリックカード：2列固定・コンパクト・正方形寄り */
+    .metric-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .metric {
+      padding: 14px 12px;
+      min-height: 92px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .metric__label { font-size: 11px; margin-bottom: 6px; }
+    .metric__value { font-size: 20px; }
+    .metric__unit { font-size: 11px; }
+
+    /* タブバー：カード上部にスティッキー固定 */
+    .card { position: relative; }
+    .tab-bar {
+      position: sticky;
+      top: 50px; /* sticky header の高さ */
+      background: #fff;
+      z-index: 5;
+      margin: -28px -28px 12px -28px;
+      padding: 10px 16px 0;
+    }
+
+    /* タブコンテンツ：永遠に縦に伸びないよう内部スクロール */
+    [id^="tab-"] {
+      max-height: 65vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-right: 4px;
+    }
+  }
   @media (max-width: 480px) {
     .tab-btn { padding: 8px 11px; font-size: 12px; }
   }
@@ -239,9 +277,10 @@
   loadPartners();
   loadRequestsBadge();
 
-  // タブ切替
+  // タブ切替（スクロール位置保持）
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      const scrollY = window.scrollY;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       ['partners','requests','invitations','notify','ledger','revenue'].forEach(k => {
@@ -251,6 +290,8 @@
       if (btn.dataset.tab === 'requests') loadRequests();
       if (btn.dataset.tab === 'invitations') loadInvitations();
       if (btn.dataset.tab === 'notify') initNotifyTab();
+      // 描画後にスクロール位置を復元（自動スクロール防止）
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
     });
   });
   document.getElementById('reloadReqBtn').addEventListener('click', loadRequests);
