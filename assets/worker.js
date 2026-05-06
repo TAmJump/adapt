@@ -4050,6 +4050,113 @@ TAmJ.Corp`
         }, 200, cors);
       }
 
+      // 内部API：子→親 subscription 同期パイプ（タスク3 / 設計書 v2 §22）
+      // 共通シークレット認証：Authorization: Bearer ${INTERNAL_API_KEY}
+      // 子（onetouch / medadapt）の /billing/setup 成功時に呼び出される
+      if (path === '/api/internal/master-company-by-child-login' && method === 'GET') {
+        const auth = request.headers.get('authorization') || '';
+        if (!env.INTERNAL_API_KEY || auth !== 'Bearer ' + env.INTERNAL_API_KEY) {
+          return json({ ok: false, error: 'unauthorized' }, 401, cors);
+        }
+        const appName = url.searchParams.get('app_name');
+        const childLoginId = url.searchParams.get('child_login_id');
+        if (!appName || !childLoginId) {
+          return json({ ok: false, error: 'missing_params' }, 400, cors);
+        }
+        const link = await db.prepare(
+          "SELECT staff_id FROM app_links " +
+          " WHERE app_name = ? AND child_login_id = ? AND status = 'linked' LIMIT 1"
+        ).bind(appName, childLoginId).first();
+        if (!link) {
+          return json({ ok: true, master_company_id: null, reason: 'not_linked' }, 200, cors);
+        }
+        const staff = await db.prepare(
+          "SELECT master_company_id FROM master_staff WHERE staff_id = ?"
+        ).bind(link.staff_id).first();
+        if (!staff) {
+          return json({ ok: true, master_company_id: null, reason: 'staff_not_found' }, 200, cors);
+        }
+        const company = await db.prepare(
+          "SELECT partner_code FROM master_companies WHERE company_id = ?"
+        ).bind(staff.master_company_id).first();
+        return json({
+          ok: true,
+          master_company_id: staff.master_company_id,
+          partner_code: company?.partner_code || null
+        }, 200, cors);
+      }
+
+      if (path === '/api/internal/subscription-sync' && method === 'POST') {
+        const auth = request.headers.get('authorization') || '';
+        if (!env.INTERNAL_API_KEY || auth !== 'Bearer ' + env.INTERNAL_API_KEY) {
+          return json({ ok: false, error: 'unauthorized' }, 401, cors);
+        }
+        const body = await request.json().catch(() => null);
+        if (!body) return json({ ok: false, error: 'invalid_body' }, 400, cors);
+
+        // 未連携時はスキップ（子側は記録だけで先へ進める）
+        if (!body.master_company_id) {
+          return json({ ok: true, skipped: true, reason: 'not_linked' }, 200, cors);
+        }
+
+        // 必須フィールドチェック
+        const required = ['app_name', 'plan', 'seat_count', 'unit_price', 'square_subscription_id', 'started_at', 'status'];
+        const missing = required.filter(k => body[k] === undefined || body[k] === null);
+        if (missing.length) {
+          return json({ ok: false, error: 'missing_fields', fields: missing }, 400, cors);
+        }
+        if (!['onetouch', 'medadapt'].includes(body.app_name)) {
+          return json({ ok: false, error: 'invalid_app' }, 400, cors);
+        }
+
+        // partner_code を最新値で取得（claim 済か含めて）
+        const company = await db.prepare(
+          "SELECT partner_code FROM master_companies WHERE company_id = ?"
+        ).bind(body.master_company_id).first();
+        if (!company) {
+          return json({ ok: false, error: 'master_company_not_found' }, 404, cors);
+        }
+        const partnerCode = company.partner_code || null;
+
+        // upsert（UNIQUE(master_company_id, app_name) 前提）
+        const subId = 'SUB-' + randomId(12);
+        const now = nowISO();
+        await db.prepare(
+          "INSERT INTO subscriptions " +
+          "  (subscription_id, master_company_id, app_name, plan, seat_count, unit_price, " +
+          "   partner_code, square_subscription_id, started_at, status, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "ON CONFLICT(master_company_id, app_name) DO UPDATE SET " +
+          "  plan = excluded.plan, " +
+          "  seat_count = excluded.seat_count, " +
+          "  unit_price = excluded.unit_price, " +
+          "  partner_code = excluded.partner_code, " +
+          "  square_subscription_id = excluded.square_subscription_id, " +
+          "  started_at = excluded.started_at, " +
+          "  status = excluded.status, " +
+          "  updated_at = excluded.updated_at"
+        ).bind(
+          subId, body.master_company_id, body.app_name, body.plan,
+          body.seat_count, body.unit_price, partnerCode,
+          body.square_subscription_id, body.started_at, body.status,
+          now, now
+        ).run();
+
+        // 既存行があった場合 subId は使われないので、実際の subscription_id を再取得
+        const synced = await db.prepare(
+          "SELECT subscription_id, partner_code, status FROM subscriptions " +
+          " WHERE master_company_id = ? AND app_name = ?"
+        ).bind(body.master_company_id, body.app_name).first();
+
+        return json({
+          ok: true,
+          synced: true,
+          subscription_id: synced?.subscription_id || subId,
+          partner_code: synced?.partner_code || partnerCode,
+          status: synced?.status || body.status
+        }, 200, cors);
+      }
+
       // =============== Square 決済連携（Phase 3f） ===============
 
       // 購入可能なプラン一覧
