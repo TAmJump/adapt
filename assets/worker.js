@@ -4157,6 +4157,84 @@ TAmJ.Corp`
         }, 200, cors);
       }
 
+      // 内部API：子→親 billing_events 同期（Phase 2.5 / 設計書 v4 §24 予定）
+      // 共通シークレット認証：Authorization: Bearer ${INTERNAL_API_KEY}
+      // 子（onetouch / medadapt）の各課金操作成功時に recordBillingEvent から呼び出される
+      if (path === '/api/internal/billing-event-sync' && method === 'POST') {
+        const auth = request.headers.get('authorization') || '';
+        if (!env.INTERNAL_API_KEY || auth !== 'Bearer ' + env.INTERNAL_API_KEY) {
+          return json({ ok: false, error: 'unauthorized' }, 401, cors);
+        }
+        const body = await request.json().catch(() => null);
+        if (!body) return json({ ok: false, error: 'invalid_body' }, 400, cors);
+
+        const required = ['app_name', 'child_login_id', 'event_type', 'occurred_at'];
+        const missing = required.filter(k => body[k] === undefined || body[k] === null);
+        if (missing.length) {
+          return json({ ok: false, error: 'missing_fields', fields: missing }, 400, cors);
+        }
+        if (!['onetouch', 'medadapt'].includes(body.app_name)) {
+          return json({ ok: false, error: 'invalid_app' }, 400, cors);
+        }
+
+        // app_links → master_staff → master_companies の順で逆引き
+        const link = await db.prepare(
+          "SELECT staff_id FROM app_links " +
+          " WHERE app_name = ? AND child_login_id = ? AND status = 'linked' LIMIT 1"
+        ).bind(body.app_name, body.child_login_id).first();
+
+        let masterCompanyId = null;
+        let partnerCode = null;
+
+        if (link) {
+          const staff = await db.prepare(
+            "SELECT master_company_id FROM master_staff WHERE staff_id = ?"
+          ).bind(link.staff_id).first();
+          if (staff) {
+            masterCompanyId = staff.master_company_id;
+            const company = await db.prepare(
+              "SELECT partner_code FROM master_companies WHERE company_id = ?"
+            ).bind(masterCompanyId).first();
+            partnerCode = company?.partner_code || null;
+          }
+        }
+
+        // 未連携時は記録だけスキップして 200（子側は記録済なので親側のミラーが無いだけ）
+        if (!masterCompanyId) {
+          return json({ ok: true, skipped: true, reason: 'not_linked' }, 200, cors);
+        }
+
+        const eventId = 'BE-' + randomId(12);
+        const eventDataStr = typeof body.event_data === 'string'
+          ? body.event_data
+          : JSON.stringify(body.event_data || {});
+
+        await db.prepare(
+          "INSERT INTO billing_events " +
+          "  (id, master_company_id, app_name, partner_code, event_type, " +
+          "   actor_login_id, actor_name, event_data, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          eventId,
+          masterCompanyId,
+          body.app_name,
+          partnerCode,
+          body.event_type,
+          body.actor_login_id || null,
+          body.actor_name || null,
+          eventDataStr,
+          body.occurred_at
+        ).run();
+
+        return json({
+          ok: true,
+          synced: true,
+          event_id: eventId,
+          master_company_id: masterCompanyId,
+          partner_code: partnerCode
+        }, 200, cors);
+      }
+
       // =============== Square 決済連携（Phase 3f） ===============
 
       // 購入可能なプラン一覧
