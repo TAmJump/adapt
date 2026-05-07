@@ -71,6 +71,53 @@
   .status-active     { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
   .status-pending    { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
   .status-expired    { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+
+  /* v27 Phase 2.5 STEP4: モバイルでテーブルを縦積みカード化（横スクロール不要） */
+  /* table に class="tbl-stack" を付けると ≤640px で各行がカード化される */
+  /* 各 td に data-label="..." を入れることで左側にラベル、右側に値が表示される */
+  @media (max-width: 640px) {
+    .card table.tbl-stack { display: block; overflow-x: visible; white-space: normal; }
+    .card table.tbl-stack thead { display: none; }
+    .card table.tbl-stack tbody,
+    .card table.tbl-stack tr { display: block; width: 100%; min-width: 0; }
+    .card table.tbl-stack tr {
+      border: 1px solid #e3e3e0;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .card table.tbl-stack td {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      white-space: normal;
+      padding: 5px 0;
+      border: none;
+      border-bottom: 1px dashed #f1f1ef;
+      font-size: 13px;
+      min-height: 28px;
+    }
+    .card table.tbl-stack td:last-child { border-bottom: none; }
+    .card table.tbl-stack td::before {
+      content: attr(data-label);
+      font-size: 11px;
+      color: #666;
+      font-weight: 600;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+    .card table.tbl-stack td.td-actions {
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .card table.tbl-stack td.td-actions::before { display: none; }
+    /* 値側の右寄せ */
+    .card table.tbl-stack td > * { text-align: right; }
+  }
 </style>
 </head>
 <body>
@@ -214,7 +261,7 @@
         return;
       }
       el.innerHTML = `
-        <table>
+        <table class="tbl-stack">
           <thead><tr>
             <th>コード</th><th>会社名</th><th>ログインID</th><th>メール</th>
             <th>ご紹介先企業</th><th>按分率</th><th>契約終了</th><th>状態</th><th>操作</th>
@@ -222,15 +269,15 @@
           <tbody>
             ${list.map(a => `
               <tr>
-                <td class="mono">${Adapt.escapeHTML(a.code)}</td>
-                <td>${Adapt.escapeHTML(a.company_name)}</td>
-                <td class="mono">${Adapt.escapeHTML(a.login_id)}</td>
-                <td>${Adapt.escapeHTML(a.email || '-')}</td>
-                <td class="mono">${a.customer_count}社</td>
-                <td class="mono">${a.share_pct != null ? a.share_pct + '%' : '-'}</td>
-                <td class="mono">${formatDate(a.contract_end_at)}</td>
-                <td>${statusLabel(a.status)}</td>
-                <td>
+                <td data-label="コード" class="mono">${Adapt.escapeHTML(a.code)}</td>
+                <td data-label="会社名">${Adapt.escapeHTML(a.company_name)}</td>
+                <td data-label="ログインID" class="mono">${Adapt.escapeHTML(a.login_id)}</td>
+                <td data-label="メール">${Adapt.escapeHTML(a.email || '-')}</td>
+                <td data-label="ご紹介先企業" class="mono">${a.customer_count}社</td>
+                <td data-label="按分率" class="mono">${a.share_pct != null ? a.share_pct + '%' : '-'}</td>
+                <td data-label="契約終了" class="mono">${formatDate(a.contract_end_at)}</td>
+                <td data-label="状態">${statusLabel(a.status)}</td>
+                <td class="td-actions">
                   ${a.status === 'active' ? `
                     <button class="btn btn--sm" data-agent-detail="${a.partner_id}" data-agent-company="${Adapt.escapeHTML(a.company_name)}" data-agent-code="${Adapt.escapeHTML(a.code)}">詳細</button>
                     <button class="btn btn--sm" data-share-edit="${a.partner_id}" data-share-pct="${a.share_pct ?? ''}" data-share-company="${Adapt.escapeHTML(a.company_name)}">按分率</button>
@@ -331,7 +378,7 @@
 
     el.innerHTML = `
         ${filterUI}
-        <table>
+        <table class="tbl-stack">
           <thead><tr>
             <th>会社ID</th><th>会社名</th><th>メール</th>
             <th>パートナーコード</th><th>スタッフ数</th><th>有料契約</th><th>登録日</th>
@@ -342,14 +389,14 @@
               const isDirect = c.partner_code === _customersMeta.my_code;
               return `
               <tr>
-                <td class="mono">${Adapt.escapeHTML(c.company_id)}</td>
-                <td>${Adapt.escapeHTML(c.name)}</td>
-                <td>${Adapt.escapeHTML(c.email || '-')}</td>
-                <td class="mono"${isDirect ? ' style="color:#c4432b;font-weight:700;"' : ''}>${Adapt.escapeHTML(c.partner_code || '-')}${isDirect ? ' <span style="font-size:10px;font-weight:normal;">（直販）</span>' : ''}</td>
-                <td class="mono">${c.staff_count}</td>
-                <td class="mono">${c.active_subs}</td>
-                <td class="mono">${formatDate(c.created_at)}</td>
-                <td><button type="button" class="btn-history" data-company-id="${Adapt.escapeHTML(c.company_id)}" data-company-name="${Adapt.escapeHTML(c.name)}" style="padding:3px 10px;font-size:11px;border:1px solid #0891b2;background:#fff;color:#0891b2;border-radius:6px;cursor:pointer;">表示</button></td>
+                <td data-label="会社ID" class="mono">${Adapt.escapeHTML(c.company_id)}</td>
+                <td data-label="会社名">${Adapt.escapeHTML(c.name)}</td>
+                <td data-label="メール">${Adapt.escapeHTML(c.email || '-')}</td>
+                <td data-label="パートナーコード" class="mono"${isDirect ? ' style="color:#c4432b;font-weight:700;"' : ''}>${Adapt.escapeHTML(c.partner_code || '-')}${isDirect ? ' <span style="font-size:10px;font-weight:normal;">（直販）</span>' : ''}</td>
+                <td data-label="スタッフ数" class="mono">${c.staff_count}</td>
+                <td data-label="有料契約" class="mono">${c.active_subs}</td>
+                <td data-label="登録日" class="mono">${formatDate(c.created_at)}</td>
+                <td class="td-actions"><button type="button" class="btn-history" data-company-id="${Adapt.escapeHTML(c.company_id)}" data-company-name="${Adapt.escapeHTML(c.name)}" style="padding:3px 10px;font-size:11px;border:1px solid #0891b2;background:#fff;color:#0891b2;border-radius:6px;cursor:pointer;">履歴を表示</button></td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -824,19 +871,19 @@
         </div>
         <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">ご紹介先企業一覧</h4>
         <div style="max-height:280px;overflow-y:auto;">
-        <table style="font-size:12px;">
+        <table class="tbl-stack" style="font-size:12px;">
           <thead><tr>
             <th>会社ID</th><th>会社名</th><th>メール</th><th>スタッフ</th><th>有料契約</th><th>登録日</th>
           </tr></thead>
           <tbody>
             ${list.map(cu => `
               <tr>
-                <td class="mono">${Adapt.escapeHTML(cu.company_id)}</td>
-                <td>${Adapt.escapeHTML(cu.name)}</td>
-                <td>${Adapt.escapeHTML(cu.email || '-')}</td>
-                <td class="mono">${cu.staff_count}</td>
-                <td class="mono">${cu.active_subs}</td>
-                <td class="mono">${formatDate(cu.created_at)}</td>
+                <td data-label="会社ID" class="mono">${Adapt.escapeHTML(cu.company_id)}</td>
+                <td data-label="会社名">${Adapt.escapeHTML(cu.name)}</td>
+                <td data-label="メール">${Adapt.escapeHTML(cu.email || '-')}</td>
+                <td data-label="スタッフ" class="mono">${cu.staff_count}</td>
+                <td data-label="有料契約" class="mono">${cu.active_subs}</td>
+                <td data-label="登録日" class="mono">${formatDate(cu.created_at)}</td>
               </tr>
             `).join('')}
           </tbody>
