@@ -75,7 +75,17 @@
   /* v27 Phase 2.5 STEP4: モバイルでテーブルを縦積みカード化（横スクロール不要） */
   /* table に class="tbl-stack" を付けると ≤640px で各行がカード化される */
   /* 各 td に data-label="..." を入れることで左側にラベル、右側に値が表示される */
+  /* td.td-summary: モバイルでだけ表示される要約行（折り畳み時に常時見える） */
+  /* tr.compact: 折り畳み中（モバイル）状態 → td-summary と td-actions のみ表示 */
+  .td-summary { display: none; }
   @media (max-width: 640px) {
+    /* サマリーメトリクス：モバイルでも2列グリッド（縦長解消） */
+    .metric-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .metric { padding: 10px 12px; }
+    .metric__value { font-size: 18px; }
+    .metric__label { font-size: 11px; margin-bottom: 2px; }
+    .metric__unit { font-size: 11px; }
+
     .card table.tbl-stack { display: block; overflow-x: visible; white-space: normal; }
     .card table.tbl-stack thead { display: none; }
     .card table.tbl-stack tbody,
@@ -83,7 +93,7 @@
     .card table.tbl-stack tr {
       border: 1px solid #e3e3e0;
       border-radius: 8px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       padding: 8px 12px;
       background: #fff;
       box-shadow: 0 1px 2px rgba(0,0,0,0.03);
@@ -115,9 +125,89 @@
       flex-wrap: wrap;
     }
     .card table.tbl-stack td.td-actions::before { display: none; }
-    /* 値側の右寄せ */
     .card table.tbl-stack td > * { text-align: right; }
+
+    /* 折り畳みモード：td-summary を表示・通常 td を非表示 */
+    .card table.tbl-stack td.td-summary {
+      display: block;
+      cursor: pointer;
+      user-select: none;
+      padding: 4px 0;
+      border-bottom: 1px solid #f1f1ef;
+      margin-bottom: 4px;
+    }
+    .card table.tbl-stack td.td-summary::before { display: none; }
+    .card table.tbl-stack td.td-summary > * { text-align: left; }
+    .card table.tbl-stack td.td-summary .td-summary__title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0a0e1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .card table.tbl-stack td.td-summary .td-summary__sub {
+      font-size: 11px;
+      color: #666;
+      margin-top: 2px;
+    }
+    .card table.tbl-stack td.td-summary .td-summary__caret::after { content: '▼'; font-size: 10px; color: #999; }
+    .card table.tbl-stack tr.compact td.td-summary .td-summary__caret::after { content: '▶'; }
+    .card table.tbl-stack tr.compact td:not(.td-summary):not(.td-actions) { display: none; }
+    .card table.tbl-stack tr.compact td.td-summary { border-bottom: none; margin-bottom: 0; padding: 2px 0; }
   }
+  /* デスクトップ（>640px）では td-summary は常時非表示 */
+
+  /* v27 Phase 2.5 STEP4 (本格版): 検索ボックス・ページネーター */
+  .tbl-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .tbl-toolbar input[type="search"] {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 12px;
+    font-size: 13px;
+    border: 1px solid #d6d6d2;
+    border-radius: 6px;
+    background: #fff;
+  }
+  .tbl-toolbar input[type="search"]:focus {
+    outline: none;
+    border-color: #c4432b;
+  }
+  .tbl-toolbar .tbl-toolbar__count {
+    font-size: 11px;
+    color: #999;
+    flex-shrink: 0;
+  }
+  .tbl-pager {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .tbl-pager button {
+    min-width: 32px;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 12px;
+    border: 1px solid #d6d6d2;
+    background: #fff;
+    border-radius: 5px;
+    cursor: pointer;
+    color: #333;
+  }
+  .tbl-pager button:hover:not(:disabled) { background: #f7f6f3; }
+  .tbl-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .tbl-pager button.is-active { background: #c4432b; color: #fff; border-color: #c4432b; }
+  .tbl-pager .tbl-pager__info { font-size: 11px; color: #666; margin: 0 8px; }
 </style>
 </head>
 <body>
@@ -250,25 +340,56 @@
     document.getElementById('addAgentBtn').addEventListener('click', openAddAgentModal);
   }
 
+  // Reseller 一覧（Master Reseller のみ）
+  let _subAgentsCache = [];
+  let _subAgentsState = { search: '', page: 1, pageSize: 20 };
   async function loadSubAgents() {
     const el = document.getElementById('subAgentsContent');
     el.innerHTML = '<p class="muted">読み込み中…</p>';
     try {
       const r = await PartnerAPI.call('/api/partner/sub-agents');
-      const list = r.sub_agents || [];
-      if (list.length === 0) {
-        el.innerHTML = `<p class="muted">まだResellerが登録されていません。右上の「＋ Resellerを登録」から追加してください。</p>`;
-        return;
-      }
-      el.innerHTML = `
+      _subAgentsCache = r.sub_agents || [];
+      renderSubAgents();
+    } catch (e) {
+      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  function renderSubAgents() {
+    const el = document.getElementById('subAgentsContent');
+    const full = _subAgentsCache;
+    const state = _subAgentsState;
+    if (full.length === 0) {
+      el.innerHTML = `<p class="muted">まだResellerが登録されていません。右上の「＋ Resellerを登録」から追加してください。</p>`;
+      return;
+    }
+    const filtered = _applySearch(full, state.search, a => [a.code, a.company_name, a.login_id, a.email]);
+    const pageInfo = _paginate(filtered, state.page, state.pageSize);
+
+    el.innerHTML = `
+        <div class="tbl-toolbar">
+          <input id="subAgentSearch" type="search" placeholder="🔍 コード・会社名・ログインID・メールで検索"
+                 value="${Adapt.escapeHTML(state.search)}" />
+          <span class="tbl-toolbar__count">${pageInfo.total}件 該当</span>
+        </div>
         <table class="tbl-stack">
           <thead><tr>
             <th>コード</th><th>会社名</th><th>ログインID</th><th>メール</th>
             <th>ご紹介先企業</th><th>按分率</th><th>契約終了</th><th>状態</th><th>操作</th>
           </tr></thead>
           <tbody>
-            ${list.map(a => `
-              <tr>
+            ${pageInfo.items.map(a => {
+              const summaryHtml = `
+                <td class="td-summary">
+                  <div class="td-summary__title">
+                    <span>${Adapt.escapeHTML(a.company_name)}</span>
+                    <span class="td-summary__caret"></span>
+                  </div>
+                  <div class="td-summary__sub">${Adapt.escapeHTML(a.code)} ・ ${a.customer_count}社 ・ ${statusLabel(a.status)}</div>
+                </td>`;
+              return `
+              <tr class="compact" data-id="${Adapt.escapeHTML(a.partner_id)}">
+                ${summaryHtml}
                 <td data-label="コード" class="mono">${Adapt.escapeHTML(a.code)}</td>
                 <td data-label="会社名">${Adapt.escapeHTML(a.company_name)}</td>
                 <td data-label="ログインID" class="mono">${Adapt.escapeHTML(a.login_id)}</td>
@@ -285,47 +406,134 @@
                   ` : ''}
                 </td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
         </table>
+        ${_renderPager(pageInfo)}
       `;
-      // 按分率変更・履歴ボタン
-      el.querySelectorAll('[data-share-edit]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          openSubAgentShareEditModal({
-            agentId: btn.dataset.shareEdit,
-            companyName: btn.dataset.shareCompany,
-            currentPct: btn.dataset.sharePct !== '' ? Number(btn.dataset.sharePct) : null,
-            parentPct: p.revenue_share_pct
-          });
-        });
+    // 検索（300ms デバウンス）
+    const searchEl = document.getElementById('subAgentSearch');
+    if (searchEl) {
+      let timer = null;
+      searchEl.addEventListener('input', (e) => {
+        if (timer) clearTimeout(timer);
+        const v = e.target.value;
+        timer = setTimeout(() => { state.search = v; state.page = 1; renderSubAgents(); }, 200);
       });
-      el.querySelectorAll('[data-share-history]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          openSubAgentShareHistoryModal({
-            agentId: btn.dataset.shareHistory,
-            companyName: btn.dataset.shareCompany
-          });
-        });
-      });
-      // Phase 4-3e: Reseller詳細モーダル
-      el.querySelectorAll('[data-agent-detail]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          openSubAgentDetailModal({
-            agentId: btn.dataset.agentDetail,
-            agentCode: btn.dataset.agentCode,
-            companyName: btn.dataset.agentCompany
-          });
-        });
-      });
-    } catch (e) {
-      el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
     }
+    // ページャ
+    _bindPager(el, (p) => { state.page = p; renderSubAgents(); });
+    // 操作ボタン（折り畳みタップ伝播抑止）
+    el.querySelectorAll('[data-share-edit]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSubAgentShareEditModal({
+          agentId: btn.dataset.shareEdit,
+          companyName: btn.dataset.shareCompany,
+          currentPct: btn.dataset.sharePct !== '' ? Number(btn.dataset.sharePct) : null,
+          parentPct: p.revenue_share_pct
+        });
+      });
+    });
+    el.querySelectorAll('[data-share-history]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSubAgentShareHistoryModal({
+          agentId: btn.dataset.shareHistory,
+          companyName: btn.dataset.shareCompany
+        });
+      });
+    });
+    el.querySelectorAll('[data-agent-detail]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSubAgentDetailModal({
+          agentId: btn.dataset.agentDetail,
+          agentCode: btn.dataset.agentCode,
+          companyName: btn.dataset.agentCompany
+        });
+      });
+    });
+    // モバイル折り畳みトグル
+    _bindFolding(el);
+  }
+
+  // --- v27 Phase 2.5 STEP4 本格版: テーブル一覧の共通ユーティリティ ---
+  // フィルタ + ページネーション + モバイル折り畳み対応の補助
+  function _applySearch(list, search, getKeysFn) {
+    if (!search) return list;
+    const q = search.toLowerCase().trim();
+    if (!q) return list;
+    return list.filter(item => {
+      const keys = getKeysFn(item);
+      return keys.some(k => String(k || '').toLowerCase().includes(q));
+    });
+  }
+  function _paginate(list, page, pageSize) {
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    const start = (safePage - 1) * pageSize;
+    return {
+      items: list.slice(start, start + pageSize),
+      page: safePage,
+      pageSize,
+      total,
+      totalPages,
+      from: total === 0 ? 0 : start + 1,
+      to: Math.min(start + pageSize, total),
+    };
+  }
+  function _renderPager(pageInfo, onPageChange) {
+    const { page, totalPages, from, to, total } = pageInfo;
+    if (totalPages <= 1) {
+      return `<div class="tbl-pager"><span class="tbl-pager__info">${total}件</span></div>`;
+    }
+    // ページボタンを最大7個表示（前後省略）
+    const pages = [];
+    const window = 1;
+    const add = (p) => pages.push(p);
+    add(1);
+    if (page - window > 2) add('...');
+    for (let p = Math.max(2, page - window); p <= Math.min(totalPages - 1, page + window); p++) add(p);
+    if (page + window < totalPages - 1) add('...');
+    if (totalPages > 1) add(totalPages);
+    const buttons = pages.map(p => p === '...'
+      ? `<span class="tbl-pager__info">...</span>`
+      : `<button type="button" class="${p === page ? 'is-active' : ''}" data-pager-page="${p}">${p}</button>`
+    ).join('');
+    return `
+      <div class="tbl-pager">
+        <button type="button" data-pager-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>‹</button>
+        ${buttons}
+        <button type="button" data-pager-page="${page + 1}" ${page >= totalPages ? 'disabled' : ''}>›</button>
+        <span class="tbl-pager__info">${from}-${to} / ${total}件</span>
+      </div>`;
+  }
+  function _bindPager(rootEl, onPageChange) {
+    rootEl.querySelectorAll('[data-pager-page]').forEach(b => {
+      b.addEventListener('click', (e) => {
+        const p = parseInt(e.currentTarget.getAttribute('data-pager-page'), 10);
+        if (!isNaN(p)) onPageChange(p);
+      });
+    });
+  }
+  function _bindFolding(rootEl) {
+    // td.td-summary タップで tr.compact をトグル（モバイル折り畳み）
+    rootEl.querySelectorAll('td.td-summary').forEach(td => {
+      td.addEventListener('click', (e) => {
+        // ボタンクリックは伝播停止しているので、ここに来るのは要約部分のクリックのみ
+        const tr = e.currentTarget.closest('tr');
+        if (tr) tr.classList.toggle('compact');
+      });
+    });
   }
 
   // --- ご紹介先企業一覧 ---
   let _customersCache = [];
   let _customersMeta = { my_code: '', is_super: false, sub_agent_codes: [] };
+  let _customersState = { filter: 'all', search: '', page: 1, pageSize: 20 };
   (async function loadCustomers() {
     const el = document.getElementById('customersContent');
     el.innerHTML = '<p class="muted">読み込み中…</p>';
@@ -337,47 +545,56 @@
         is_super: r.is_super,
         sub_agent_codes: r.sub_agent_codes || []
       };
-      renderCustomers('all');
+      renderCustomers();
     } catch (e) {
       el.innerHTML = `<div class="msg msg--err">取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
     }
   })();
 
-  function renderCustomers(filter) {
+  function renderCustomers() {
     const el = document.getElementById('customersContent');
     const full = _customersCache;
+    const state = _customersState;
     if (full.length === 0) {
       el.innerHTML = `<p class="muted">ご紹介先企業はまだいません。Resellerコードを案内して登録してもらってください。</p>`;
       return;
     }
-    // フィルタ適用
+    // パートナーコードフィルタ
     let list = full;
-    if (filter === 'direct') list = full.filter(c => c.partner_code === _customersMeta.my_code);
-    else if (filter && filter !== 'all') list = full.filter(c => c.partner_code === filter);
+    if (state.filter === 'direct') list = full.filter(c => c.partner_code === _customersMeta.my_code);
+    else if (state.filter && state.filter !== 'all') list = full.filter(c => c.partner_code === state.filter);
+    // 検索
+    list = _applySearch(list, state.search, c => [c.company_id, c.name, c.email, c.partner_code]);
+    // ページネーション
+    const pageInfo = _paginate(list, state.page, state.pageSize);
 
-    // フィルタドロップダウン（super のみ表示）
+    // フィルタドロップダウン UI（super のみ表示）
     let filterUI = '';
     if (_customersMeta.is_super) {
       const options = [
-        `<option value="all"${filter === 'all' ? ' selected' : ''}>すべて (${full.length})</option>`,
-        `<option value="direct"${filter === 'direct' ? ' selected' : ''}>直販のみ (${full.filter(c => c.partner_code === _customersMeta.my_code).length})</option>`
+        `<option value="all"${state.filter === 'all' ? ' selected' : ''}>すべて (${full.length})</option>`,
+        `<option value="direct"${state.filter === 'direct' ? ' selected' : ''}>直販のみ (${full.filter(c => c.partner_code === _customersMeta.my_code).length})</option>`
       ];
       for (const sa of _customersMeta.sub_agent_codes) {
         const n = full.filter(c => c.partner_code === sa.code).length;
-        options.push(`<option value="${Adapt.escapeHTML(sa.code)}"${filter === sa.code ? ' selected' : ''}>${Adapt.escapeHTML(sa.code)} ${Adapt.escapeHTML(sa.company_name)} (${n})</option>`);
+        options.push(`<option value="${Adapt.escapeHTML(sa.code)}"${state.filter === sa.code ? ' selected' : ''}>${Adapt.escapeHTML(sa.code)} ${Adapt.escapeHTML(sa.company_name)} (${n})</option>`);
       }
       filterUI = `
-        <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+        <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <label style="font-size:12px;color:#666;">フィルタ：</label>
           <select id="customerFilter" style="padding:4px 8px;font-size:12px;">
             ${options.join('')}
           </select>
-          <span style="font-size:11px;color:#999;">${list.length}社 表示中</span>
         </div>`;
     }
 
     el.innerHTML = `
         ${filterUI}
+        <div class="tbl-toolbar">
+          <input id="customerSearch" type="search" placeholder="🔍 会社名・会社ID・メール・コードで検索"
+                 value="${Adapt.escapeHTML(state.search)}" />
+          <span class="tbl-toolbar__count">${pageInfo.total}件 該当</span>
+        </div>
         <table class="tbl-stack">
           <thead><tr>
             <th>会社ID</th><th>会社名</th><th>メール</th>
@@ -385,14 +602,24 @@
             <th>履歴</th>
           </tr></thead>
           <tbody>
-            ${list.map(c => {
+            ${pageInfo.items.map(c => {
               const isDirect = c.partner_code === _customersMeta.my_code;
+              const codeHtml = `<span class="mono"${isDirect ? ' style="color:#c4432b;font-weight:700;"' : ''}>${Adapt.escapeHTML(c.partner_code || '-')}</span>${isDirect ? ' <span style="font-size:10px;color:#c4432b;">（直販）</span>' : ''}`;
+              const summaryHtml = `
+                <td class="td-summary">
+                  <div class="td-summary__title">
+                    <span>${Adapt.escapeHTML(c.name)}</span>
+                    <span class="td-summary__caret"></span>
+                  </div>
+                  <div class="td-summary__sub">${Adapt.escapeHTML(c.partner_code || '-')}${isDirect ? '（直販）' : ''} ・ 有料契約 ${c.active_subs}件</div>
+                </td>`;
               return `
-              <tr>
+              <tr class="compact" data-id="${Adapt.escapeHTML(c.company_id)}">
+                ${summaryHtml}
                 <td data-label="会社ID" class="mono">${Adapt.escapeHTML(c.company_id)}</td>
                 <td data-label="会社名">${Adapt.escapeHTML(c.name)}</td>
                 <td data-label="メール">${Adapt.escapeHTML(c.email || '-')}</td>
-                <td data-label="パートナーコード" class="mono"${isDirect ? ' style="color:#c4432b;font-weight:700;"' : ''}>${Adapt.escapeHTML(c.partner_code || '-')}${isDirect ? ' <span style="font-size:10px;font-weight:normal;">（直販）</span>' : ''}</td>
+                <td data-label="パートナーコード">${codeHtml}</td>
                 <td data-label="スタッフ数" class="mono">${c.staff_count}</td>
                 <td data-label="有料契約" class="mono">${c.active_subs}</td>
                 <td data-label="登録日" class="mono">${formatDate(c.created_at)}</td>
@@ -401,18 +628,34 @@
             }).join('')}
           </tbody>
         </table>
+        ${_renderPager(pageInfo)}
       `;
-    // フィルタ変更イベント
+    // フィルタ変更
     const sel = document.getElementById('customerFilter');
-    if (sel) sel.addEventListener('change', (e) => renderCustomers(e.target.value));
-    // v27 Phase 2.5: 履歴ボタン
+    if (sel) sel.addEventListener('change', (e) => { state.filter = e.target.value; state.page = 1; renderCustomers(); });
+    // 検索（IME対応：input イベントで部分一致即時フィルタ）
+    const searchEl = document.getElementById('customerSearch');
+    if (searchEl) {
+      let timer = null;
+      searchEl.addEventListener('input', (e) => {
+        if (timer) clearTimeout(timer);
+        const v = e.target.value;
+        timer = setTimeout(() => { state.search = v; state.page = 1; renderCustomers(); }, 200);
+      });
+    }
+    // ページャ
+    _bindPager(el, (p) => { state.page = p; renderCustomers(); });
+    // 履歴ボタン（折り畳みタップ伝播抑止）
     el.querySelectorAll('.btn-history').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const cid = e.currentTarget.getAttribute('data-company-id');
         const cname = e.currentTarget.getAttribute('data-company-name');
         openCustomerHistoryModal(cid, cname);
       });
     });
+    // モバイル折り畳みトグル
+    _bindFolding(el);
   }
 
   // --- Reseller登録モーダル ---
@@ -854,42 +1097,77 @@
       }
       const totalStaff = list.reduce((s, x) => s + (x.staff_count || 0), 0);
       const totalActiveSubs = list.reduce((s, x) => s + (x.active_subs || 0), 0);
-      c.innerHTML = `
-        <div class="metric-grid" style="margin-bottom:12px;">
-          <div class="metric">
-            <div class="metric__label">ご紹介先企業</div>
-            <div class="metric__value">${list.length}<span class="metric__unit">社</span></div>
+
+      // モーダル内：検索 + ページネーション state（モーダル閉じれば破棄）
+      const detailState = { search: '', page: 1, pageSize: 20 };
+      const renderDetail = () => {
+        const filtered = _applySearch(list, detailState.search, cu => [cu.company_id, cu.name, cu.email]);
+        const pageInfo = _paginate(filtered, detailState.page, detailState.pageSize);
+        c.innerHTML = `
+          <div class="metric-grid" style="margin-bottom:12px;">
+            <div class="metric">
+              <div class="metric__label">ご紹介先企業</div>
+              <div class="metric__value">${list.length}<span class="metric__unit">社</span></div>
+            </div>
+            <div class="metric">
+              <div class="metric__label">合計スタッフ数</div>
+              <div class="metric__value">${totalStaff}<span class="metric__unit">名</span></div>
+            </div>
+            <div class="metric">
+              <div class="metric__label">有料契約</div>
+              <div class="metric__value">${totalActiveSubs}<span class="metric__unit">件</span></div>
+            </div>
           </div>
-          <div class="metric">
-            <div class="metric__label">合計スタッフ数</div>
-            <div class="metric__value">${totalStaff}<span class="metric__unit">名</span></div>
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">ご紹介先企業一覧</h4>
+          <div class="tbl-toolbar">
+            <input id="subDetailSearch" type="search" placeholder="🔍 会社名・会社ID・メールで検索"
+                   value="${Adapt.escapeHTML(detailState.search)}" />
+            <span class="tbl-toolbar__count">${pageInfo.total}件 該当</span>
           </div>
-          <div class="metric">
-            <div class="metric__label">有料契約</div>
-            <div class="metric__value">${totalActiveSubs}<span class="metric__unit">件</span></div>
+          <div style="max-height:50vh;overflow-y:auto;">
+          <table class="tbl-stack" style="font-size:12px;">
+            <thead><tr>
+              <th>会社ID</th><th>会社名</th><th>メール</th><th>スタッフ</th><th>有料契約</th><th>登録日</th>
+            </tr></thead>
+            <tbody>
+              ${pageInfo.items.map(cu => {
+                const summaryHtml = `
+                  <td class="td-summary">
+                    <div class="td-summary__title">
+                      <span>${Adapt.escapeHTML(cu.name)}</span>
+                      <span class="td-summary__caret"></span>
+                    </div>
+                    <div class="td-summary__sub">${Adapt.escapeHTML(cu.company_id)} ・ 有料 ${cu.active_subs}件</div>
+                  </td>`;
+                return `
+                <tr class="compact" data-id="${Adapt.escapeHTML(cu.company_id)}">
+                  ${summaryHtml}
+                  <td data-label="会社ID" class="mono">${Adapt.escapeHTML(cu.company_id)}</td>
+                  <td data-label="会社名">${Adapt.escapeHTML(cu.name)}</td>
+                  <td data-label="メール">${Adapt.escapeHTML(cu.email || '-')}</td>
+                  <td data-label="スタッフ" class="mono">${cu.staff_count}</td>
+                  <td data-label="有料契約" class="mono">${cu.active_subs}</td>
+                  <td data-label="登録日" class="mono">${formatDate(cu.created_at)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
           </div>
-        </div>
-        <h4 style="margin:0 0 8px 0;font-size:13px;color:#c4432b;">ご紹介先企業一覧</h4>
-        <div style="max-height:280px;overflow-y:auto;">
-        <table class="tbl-stack" style="font-size:12px;">
-          <thead><tr>
-            <th>会社ID</th><th>会社名</th><th>メール</th><th>スタッフ</th><th>有料契約</th><th>登録日</th>
-          </tr></thead>
-          <tbody>
-            ${list.map(cu => `
-              <tr>
-                <td data-label="会社ID" class="mono">${Adapt.escapeHTML(cu.company_id)}</td>
-                <td data-label="会社名">${Adapt.escapeHTML(cu.name)}</td>
-                <td data-label="メール">${Adapt.escapeHTML(cu.email || '-')}</td>
-                <td data-label="スタッフ" class="mono">${cu.staff_count}</td>
-                <td data-label="有料契約" class="mono">${cu.active_subs}</td>
-                <td data-label="登録日" class="mono">${formatDate(cu.created_at)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        </div>
-      `;
+          ${_renderPager(pageInfo)}
+        `;
+        const sEl = document.getElementById('subDetailSearch');
+        if (sEl) {
+          let timer = null;
+          sEl.addEventListener('input', (e) => {
+            if (timer) clearTimeout(timer);
+            const v = e.target.value;
+            timer = setTimeout(() => { detailState.search = v; detailState.page = 1; renderDetail(); }, 200);
+          });
+        }
+        _bindPager(c, (p) => { detailState.page = p; renderDetail(); });
+        _bindFolding(c);
+      };
+      renderDetail();
     } catch (e) {
       const errMap = {
         not_your_sub_agent: '権限がありません（あなたのResellerではありません）',
