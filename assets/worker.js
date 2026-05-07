@@ -2236,6 +2236,77 @@ ${resetUrl}
         }, 200, cors);
       }
 
+      // v29 Phase 5: パートナー収益推移（月次・四半期・年次）
+      //   Master Reseller のみ：自コードの revenue_ledger を集計
+      //   Reseller : 空配列を返す（タムジ社台帳は見せない既存方針と整合）
+      if (path === '/api/partner/me/revenue-trend' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+        if (p.type !== 'super') {
+          return json({
+            ok: true, partner_type: p.type,
+            monthly: [], quarterly: [], yearly: [],
+            current_month: null, prev_month: null
+          }, 200, cors);
+        }
+        const url2 = new URL(request.url);
+        const months = Math.min(Math.max(parseInt(url2.searchParams.get('months') || '12', 10) || 12, 1), 60);
+
+        // 月次（直近 N ヶ月）
+        const monthly = await db.prepare(
+          "SELECT year_month, " +
+          "       COALESCE(SUM(gross_amount),0) AS gross_amount, " +
+          "       COALESCE(SUM(share_amount),0) AS share_amount, " +
+          "       SUM(CASE WHEN status='paid' THEN share_amount ELSE 0 END) AS paid_amount, " +
+          "       SUM(CASE WHEN status='pending' THEN share_amount ELSE 0 END) AS pending_amount " +
+          "  FROM revenue_ledger WHERE partner_code = ? " +
+          " GROUP BY year_month ORDER BY year_month DESC LIMIT ?"
+        ).bind(p.code, months).all();
+
+        // 四半期（直近 8Q = 約 2 年）
+        const quarterly = await db.prepare(
+          "SELECT SUBSTR(year_month,1,4) || '-Q' || ((CAST(SUBSTR(year_month,6,2) AS INTEGER)-1)/3 + 1) AS quarter, " +
+          "       COALESCE(SUM(gross_amount),0) AS gross_amount, " +
+          "       COALESCE(SUM(share_amount),0) AS share_amount " +
+          "  FROM revenue_ledger WHERE partner_code = ? " +
+          " GROUP BY quarter ORDER BY quarter DESC LIMIT 8"
+        ).bind(p.code).all();
+
+        // 年次（直近 5 年）
+        const yearly = await db.prepare(
+          "SELECT SUBSTR(year_month,1,4) AS year, " +
+          "       COALESCE(SUM(gross_amount),0) AS gross_amount, " +
+          "       COALESCE(SUM(share_amount),0) AS share_amount " +
+          "  FROM revenue_ledger WHERE partner_code = ? " +
+          " GROUP BY year ORDER BY year DESC LIMIT 5"
+        ).bind(p.code).all();
+
+        // 当月・前月の比較
+        const nowJst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const ym = nowJst.toISOString().slice(0, 7);
+        const prevDate = new Date(nowJst.getFullYear(), nowJst.getMonth() - 1, 1);
+        const prevYm = prevDate.toISOString().slice(0, 7);
+        const cur = await db.prepare(
+          "SELECT COALESCE(SUM(gross_amount),0) AS gross, COALESCE(SUM(share_amount),0) AS share " +
+          "  FROM revenue_ledger WHERE partner_code = ? AND year_month = ?"
+        ).bind(p.code, ym).first();
+        const prev = await db.prepare(
+          "SELECT COALESCE(SUM(gross_amount),0) AS gross, COALESCE(SUM(share_amount),0) AS share " +
+          "  FROM revenue_ledger WHERE partner_code = ? AND year_month = ?"
+        ).bind(p.code, prevYm).first();
+
+        return json({
+          ok: true,
+          partner_type: 'super',
+          monthly: (monthly.results || []).reverse(),    // 古→新（グラフ用）
+          quarterly: (quarterly.results || []).reverse(),
+          yearly: (yearly.results || []).reverse(),
+          current_month: { year_month: ym, gross_amount: cur?.gross || 0, share_amount: cur?.share || 0 },
+          prev_month: { year_month: prevYm, gross_amount: prev?.gross || 0, share_amount: prev?.share || 0 }
+        }, 200, cors);
+      }
+
       // ご紹介先企業一覧
       //   Master Reseller: 自コード + Resellerコード に紐づく master_companies
       //   Reseller  : 自コードに紐づく master_companies

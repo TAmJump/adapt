@@ -230,6 +230,15 @@
       </div>
     </section>
 
+    <!-- 収益推移（Master Resellerのみ表示・v29 Phase 5/6） -->
+    <section class="card" id="trendCard" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+        <h2 class="panel-title" style="margin:0;">収益推移</h2>
+        <button class="btn btn--ghost btn--sm" id="trendToggleBtn" type="button">▶ 推移を見る</button>
+      </div>
+      <div id="trendBody" style="display:none;"></div>
+    </section>
+
     <!-- 自分の情報 -->
     <section class="card">
       <h2 class="panel-title" id="selfInfoTitle">アカウント情報</h2>
@@ -333,11 +342,132 @@
     summaryEl.innerHTML = `<div class="msg msg--err">サマリー取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
   }
 
+  // --- v29 Phase 5/6: 収益推移カード（Master Resellerのみ） ---
+  if (isSuper) {
+    document.getElementById('trendCard').style.display = '';
+    initTrendCard();
+  }
+
   // --- Reseller一覧（Master Resellerのみ） ---
   if (isSuper) {
     document.getElementById('subAgentsCard').style.display = '';
     loadSubAgents();
     document.getElementById('addAgentBtn').addEventListener('click', openAddAgentModal);
+  }
+
+  // v29 Phase 5/6: 収益推移カード制御
+  let _trendChartLibLoaded = false;
+  let _trendDataLoaded = false;
+  let _trendData = null;
+  let _trendOpen = false;
+  function initTrendCard() {
+    const btn = document.getElementById('trendToggleBtn');
+    const body = document.getElementById('trendBody');
+    btn.addEventListener('click', async () => {
+      _trendOpen = !_trendOpen;
+      btn.textContent = _trendOpen ? '▼ 推移を閉じる' : '▶ 推移を見る';
+      body.style.display = _trendOpen ? '' : 'none';
+      if (_trendOpen && !_trendDataLoaded) {
+        body.innerHTML = '<p class="muted" style="padding:16px 0;">読み込み中…</p>';
+        try {
+          await loadTrendChartLib();
+          _trendData = await PartnerAPI.call('/api/partner/me/revenue-trend?months=12');
+          _trendDataLoaded = true;
+          renderTrendBody();
+        } catch (e) {
+          body.innerHTML = `<div class="msg msg--err">推移取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
+        }
+      }
+    });
+  }
+  async function loadTrendChartLib() {
+    if (_trendChartLibLoaded || window.Chart) { _trendChartLibLoaded = true; return; }
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1';
+      s.onload = res;
+      s.onerror = () => rej(new Error('Chart.js ロード失敗'));
+      document.head.appendChild(s);
+    });
+    _trendChartLibLoaded = true;
+  }
+  function renderTrendBody() {
+    const body = document.getElementById('trendBody');
+    const d = _trendData;
+    const cm = d.current_month || { year_month: '-', gross_amount: 0, share_amount: 0 };
+    const pm = d.prev_month || { year_month: '-', gross_amount: 0, share_amount: 0 };
+    const diffPct = pm.gross_amount > 0 ? Math.round((cm.gross_amount - pm.gross_amount) / pm.gross_amount * 100) : null;
+    const diffStr = diffPct === null ? '—' : (diffPct >= 0 ? '+' : '') + diffPct + '%';
+    const diffColor = diffPct === null ? '#666' : (diffPct >= 0 ? '#16a34a' : '#dc2626');
+    body.innerHTML = `
+      <div class="metric-grid" style="margin-bottom:18px;">
+        <div class="metric">
+          <div class="metric__label">当月売上（${cm.year_month}）</div>
+          <div class="metric__value">¥${(cm.gross_amount||0).toLocaleString()}</div>
+          <div style="font-size:12px;color:${diffColor};margin-top:4px;">前月比 ${diffStr}（前月: ¥${(pm.gross_amount||0).toLocaleString()}）</div>
+        </div>
+        <div class="metric">
+          <div class="metric__label">当月支払予定（按分後）</div>
+          <div class="metric__value">¥${(cm.share_amount||0).toLocaleString()}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr;gap:24px;">
+        <div>
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#444;">月次推移（直近12ヶ月）</h4>
+          <div style="position:relative;height:260px;"><canvas id="trendChartMonthly"></canvas></div>
+        </div>
+        <div>
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#444;">四半期推移（直近8Q）</h4>
+          <div style="position:relative;height:260px;"><canvas id="trendChartQuarterly"></canvas></div>
+        </div>
+        <div>
+          <h4 style="margin:0 0 8px 0;font-size:13px;color:#444;">年次推移</h4>
+          <div style="position:relative;height:260px;"><canvas id="trendChartYearly"></canvas></div>
+        </div>
+      </div>
+      ${(d.monthly || []).length === 0 ? '<p class="muted" style="font-size:12px;margin-top:12px;">まだ推移データがありません（月次台帳の集計後に表示されます）。</p>' : ''}
+    `;
+    drawTrendLineChart('trendChartMonthly', (d.monthly || []).map(r => r.year_month), (d.monthly || []).map(r => r.gross_amount), (d.monthly || []).map(r => r.share_amount));
+    drawTrendBarChart('trendChartQuarterly', (d.quarterly || []).map(r => r.quarter), (d.quarterly || []).map(r => r.gross_amount), (d.quarterly || []).map(r => r.share_amount));
+    drawTrendBarChart('trendChartYearly', (d.yearly || []).map(r => r.year), (d.yearly || []).map(r => r.gross_amount), (d.yearly || []).map(r => r.share_amount));
+  }
+  function drawTrendLineChart(canvasId, labels, gross, share) {
+    const el = document.getElementById(canvasId);
+    if (!el || !window.Chart) return;
+    new Chart(el.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: '売上総額', data: gross, borderColor: '#0891b2', backgroundColor: 'rgba(8,145,178,0.1)', tension: 0.3, fill: false },
+          { label: '按分後（自社）', data: share, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.1)', tension: 0.3, fill: false }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => '¥' + Number(v).toLocaleString() } } }
+      }
+    });
+  }
+  function drawTrendBarChart(canvasId, labels, gross, share) {
+    const el = document.getElementById(canvasId);
+    if (!el || !window.Chart) return;
+    new Chart(el.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: '売上総額', data: gross, backgroundColor: '#0891b2' },
+          { label: '按分後（自社）', data: share, backgroundColor: '#16a34a' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => '¥' + Number(v).toLocaleString() } } }
+      }
+    });
   }
 
   // Reseller 一覧（Master Reseller のみ）
