@@ -733,6 +733,10 @@
       const mc = d.member_count || 1;
       const amt = d.amount_jpy || (200 * mc);
       summary = '契約開始（' + mc + '名・¥' + amt.toLocaleString() + '/月）';
+    } else if (ev.event_type === 'subscription_resumed') {
+      const mc = d.member_count || 1;
+      const amt = d.amount_jpy || (200 * mc);
+      summary = '再契約（' + mc + '名・¥' + amt.toLocaleString() + '/月）';
     } else if (ev.event_type === 'card_changed') {
       const oc = d.old_card, nc = d.new_card || {};
       const ncStr = brandToLabel(nc.brand) + ' •••• ' + (nc.last_4 || '****');
