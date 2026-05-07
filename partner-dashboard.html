@@ -335,6 +335,7 @@
           <thead><tr>
             <th>会社ID</th><th>会社名</th><th>メール</th>
             <th>パートナーコード</th><th>スタッフ数</th><th>有料契約</th><th>登録日</th>
+            <th>履歴</th>
           </tr></thead>
           <tbody>
             ${list.map(c => {
@@ -348,6 +349,7 @@
                 <td class="mono">${c.staff_count}</td>
                 <td class="mono">${c.active_subs}</td>
                 <td class="mono">${formatDate(c.created_at)}</td>
+                <td><button type="button" class="btn-history" data-company-id="${Adapt.escapeHTML(c.company_id)}" data-company-name="${Adapt.escapeHTML(c.name)}" style="padding:3px 10px;font-size:11px;border:1px solid #0891b2;background:#fff;color:#0891b2;border-radius:6px;cursor:pointer;">表示</button></td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -356,6 +358,14 @@
     // フィルタ変更イベント
     const sel = document.getElementById('customerFilter');
     if (sel) sel.addEventListener('change', (e) => renderCustomers(e.target.value));
+    // v27 Phase 2.5: 履歴ボタン
+    el.querySelectorAll('.btn-history').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const cid = e.currentTarget.getAttribute('data-company-id');
+        const cname = e.currentTarget.getAttribute('data-company-name');
+        openCustomerHistoryModal(cid, cname);
+      });
+    });
   }
 
   // --- Reseller登録モーダル ---
@@ -416,6 +426,94 @@
     const wrap = document.getElementById('modalWrap');
     wrap.style.display = 'none';
     wrap.innerHTML = '';
+  }
+
+  // --- v27 Phase 2.5: 顧客企業の課金履歴モーダル ---
+  function brandToLabel(b) {
+    const m = { 'VISA':'VISA', 'MASTERCARD':'Mastercard', 'AMERICAN_EXPRESS':'AMEX', 'JCB':'JCB', 'DISCOVER':'Discover', 'DISCOVER_DINERS':'Diners', 'CHINA_UNIONPAY':'銀聯' };
+    return m[String(b||'').toUpperCase()] || String(b || 'カード');
+  }
+  function renderBillingEvent(ev) {
+    const dt = new Date(ev.created_at);
+    const pad = (n) => String(n).padStart(2, '0');
+    const tsLabel = dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+    const d = ev.event_data || {};
+    let summary = '';
+    if (ev.event_type === 'subscription_started') {
+      const mc = d.member_count || 1;
+      const amt = d.amount_jpy || (200 * mc);
+      summary = '契約開始（' + mc + '名・¥' + amt.toLocaleString() + '/月）';
+    } else if (ev.event_type === 'card_changed') {
+      const oc = d.old_card, nc = d.new_card || {};
+      const ncStr = brandToLabel(nc.brand) + ' •••• ' + (nc.last_4 || '****');
+      if (oc && oc.last_4) {
+        summary = 'カード変更：' + brandToLabel(oc.brand) + ' •••• ' + oc.last_4 + ' → ' + ncStr;
+      } else {
+        summary = 'カード登録：' + ncStr;
+      }
+    } else if (ev.event_type === 'cancelled') {
+      summary = '解約（即時）';
+    } else if (ev.event_type === 'cancel_scheduled') {
+      const mm = d.scheduled_cancel_month || '';
+      let ymLabel = '';
+      if (mm) {
+        const parts = mm.split('-');
+        ymLabel = parts[0] + '年' + parseInt(parts[1] || '0', 10) + '月';
+      }
+      summary = '解約予約：' + ymLabel + '末';
+    } else if (ev.event_type === 'unschedule_cancel') {
+      summary = '解約予約 取消';
+    } else {
+      summary = ev.event_type;
+    }
+    const appLabel = ev.app_name === 'medadapt' ? 'ｍやるゼ！' : ev.app_name === 'onetouch' ? 'ｔやるゼ！' : (ev.app_name || '');
+    const actor = ev.actor_name ? (ev.actor_name + '（' + (ev.actor_login_id || '') + '）') : (ev.actor_login_id || '-');
+    return `
+      <div style="padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;line-height:1.6;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="font-weight:600;color:#222;">${Adapt.escapeHTML(summary)}</div>
+          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:100px;background:${ev.app_name === 'medadapt' ? '#e0f2fe;color:#0c4a6e' : '#fff7ed;color:#9a3412'}">${Adapt.escapeHTML(appLabel)}</span>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">${Adapt.escapeHTML(tsLabel + ' ・ ' + actor)}</div>
+      </div>`;
+  }
+  async function openCustomerHistoryModal(companyId, companyName) {
+    const wrap = document.getElementById('modalWrap');
+    wrap.style.display = '';
+    wrap.innerHTML = `
+      <div class="modal-backdrop" id="modalBackdrop">
+        <div class="modal" id="modalBox" style="max-width:640px;">
+          <h3>契約履歴：${Adapt.escapeHTML(companyName)}</h3>
+          <p class="muted" style="font-size:12px; margin:0 0 12px 0;">
+            ｍやるゼ！とｔやるゼ！の契約イベントを横断表示しています（直近50件）。
+          </p>
+          <div id="historyContent" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+            <div style="padding:24px;text-align:center;color:#64748b;font-size:13px;">読み込み中...</div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn--ghost" id="histCloseBtn" type="button">閉じる</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('histCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'modalBackdrop') closeModal();
+    });
+    try {
+      const r = await PartnerAPI.call('/api/partner/customers/history?company_id=' + encodeURIComponent(companyId));
+      const events = r.events || [];
+      const histEl = document.getElementById('historyContent');
+      if (!histEl) return; // モーダルが既に閉じられた
+      if (events.length === 0) {
+        histEl.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;font-size:13px;">履歴はまだありません</div>';
+      } else {
+        histEl.innerHTML = events.map(renderBillingEvent).join('');
+      }
+    } catch (e) {
+      const histEl = document.getElementById('historyContent');
+      if (histEl) histEl.innerHTML = '<div style="padding:24px;text-align:center;color:#dc2626;font-size:13px;">取得失敗：' + Adapt.escapeHTML(e.message || '不明なエラー') + '</div>';
+    }
   }
 
   async function submitAgent() {

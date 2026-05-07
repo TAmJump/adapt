@@ -2274,6 +2274,65 @@ ${resetUrl}
         }, 200, cors);
       }
 
+      // 顧客企業の課金履歴取得（v27 Phase 2.5・partner-dashboard 用）
+      // クエリ: company_id（必須）/ limit（任意・最大200・既定50）
+      // 認可: requirePartnerAuth + partner.code が当該企業の partner_code 系列に含まれること
+      // （super なら自分 + 配下 reseller の partner_code 全て、agent なら自分の partner_code のみ）
+      if (path === '/api/partner/customers/history' && method === 'GET') {
+        const r = await requirePartnerAuth(request, db);
+        if (r.error) return json({ error: r.error }, r.status, cors);
+        const p = r.partner;
+        const companyId = url.searchParams.get('company_id');
+        if (!companyId) return json({ error: 'missing_company_id' }, 400, cors);
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 200);
+
+        // partner scope（super なら配下 reseller も含む）の partner_code 一覧を組む
+        let codes = [p.code];
+        if (p.type === 'super') {
+          const subs = await db.prepare(
+            "SELECT code FROM partners WHERE parent_partner_id = ? AND status != 'terminated'"
+          ).bind(p.partner_id).all();
+          codes = codes.concat((subs.results || []).map(x => x.code));
+        }
+
+        // 対象企業が partner の scope 内であることを検証
+        const placeholders = codes.map(() => '?').join(',');
+        const company = await db.prepare(
+          `SELECT company_id, name, partner_code FROM master_companies
+            WHERE company_id = ? AND partner_code IN (${placeholders}) LIMIT 1`
+        ).bind(companyId, ...codes).first();
+        if (!company) return json({ error: 'forbidden_or_not_found' }, 403, cors);
+
+        // billing_events を取得（master_company_id 軸・両アプリ横断）
+        const rows = await db.prepare(
+          "SELECT id, app_name, partner_code, event_type, actor_login_id, actor_name, event_data, created_at " +
+          "  FROM billing_events " +
+          " WHERE master_company_id = ? " +
+          " ORDER BY created_at DESC " +
+          " LIMIT ?"
+        ).bind(companyId, limit).all();
+        const events = (rows.results || []).map(r => {
+          let parsed = null;
+          try { parsed = r.event_data ? JSON.parse(r.event_data) : null; } catch (_) { parsed = null; }
+          return {
+            id: r.id,
+            app_name: r.app_name,
+            partner_code: r.partner_code,
+            event_type: r.event_type,
+            actor_login_id: r.actor_login_id,
+            actor_name: r.actor_name,
+            event_data: parsed,
+            created_at: r.created_at,
+          };
+        });
+
+        return json({
+          ok: true,
+          company: { company_id: company.company_id, name: company.name, partner_code: company.partner_code },
+          events
+        }, 200, cors);
+      }
+
       // Reseller一覧（Master Resellerのみ）
       if (path === '/api/partner/sub-agents' && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
