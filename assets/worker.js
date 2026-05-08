@@ -4239,6 +4239,10 @@ TAmJ.Corp`
           return json({ ok: false, error: 'invalid_app' }, 400, cors);
         }
 
+        // ★Phase 7: ended_at は optional（解約時のみ送られる・active 時は null）
+        // 子側 syncToParent が status='cancelled' を 'expired' に正規化して送ってくる前提
+        const endedAt = body.ended_at ?? null;
+
         // partner_code を最新値で取得（claim 済か含めて）
         const company = await db.prepare(
           "SELECT partner_code FROM master_companies WHERE company_id = ?"
@@ -4254,8 +4258,8 @@ TAmJ.Corp`
         await db.prepare(
           "INSERT INTO subscriptions " +
           "  (subscription_id, master_company_id, app_name, plan, seat_count, unit_price, " +
-          "   partner_code, square_subscription_id, started_at, status, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "   partner_code, square_subscription_id, started_at, ended_at, status, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
           "ON CONFLICT(master_company_id, app_name) DO UPDATE SET " +
           "  plan = excluded.plan, " +
           "  seat_count = excluded.seat_count, " +
@@ -4263,12 +4267,13 @@ TAmJ.Corp`
           "  partner_code = excluded.partner_code, " +
           "  square_subscription_id = excluded.square_subscription_id, " +
           "  started_at = excluded.started_at, " +
+          "  ended_at = excluded.ended_at, " +
           "  status = excluded.status, " +
           "  updated_at = excluded.updated_at"
         ).bind(
           subId, body.master_company_id, body.app_name, body.plan,
           body.seat_count, body.unit_price, partnerCode,
-          body.square_subscription_id, body.started_at, body.status,
+          body.square_subscription_id, body.started_at, endedAt, body.status,
           now, now
         ).run();
 
