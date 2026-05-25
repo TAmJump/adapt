@@ -87,26 +87,27 @@
     inset: 0;
     background-image: url('images/team_yaruze.jpg');
     background-size: cover;
-    background-position: center 28%;
+    background-position: right 28%;
     z-index: -2;
   }
-  /* 白系オーバーレイ（ミニマル感と可読性の両立） */
+  /* 白系オーバーレイ（左側=文字エリアを十分白く飛ばし、右側=顔エリアを透けさせる） */
   .lp-hero::after {
     content: '';
     position: absolute;
     inset: 0;
     background:
-      linear-gradient(100deg,
-        rgba(255,255,255,.94) 0%,
-        rgba(255,255,255,.88) 40%,
-        rgba(255,255,255,.62) 70%,
-        rgba(255,255,255,.40) 100%
+      linear-gradient(95deg,
+        rgba(255,255,255,1.00) 0%,
+        rgba(255,255,255,.98) 35%,
+        rgba(255,255,255,.78) 58%,
+        rgba(255,255,255,.45) 80%,
+        rgba(255,255,255,.28) 100%
       ),
       linear-gradient(180deg,
-        rgba(255,255,255,.10) 0%,
-        rgba(255,255,255,.00) 30%,
+        rgba(255,255,255,.06) 0%,
+        rgba(255,255,255,.00) 35%,
         rgba(255,255,255,.00) 70%,
-        rgba(255,255,255,.55) 100%
+        rgba(255,255,255,.50) 100%
       );
     z-index: -1;
   }
@@ -463,13 +464,14 @@
   /* Mobile adjustments */
   @media (max-width: 640px) {
     .lp-hero__inner { padding: 64px 24px 56px; }
-    .lp-hero::before { background-position: center 18%; }
+    .lp-hero::before { background-position: center 78%; }
     .lp-hero::after {
       background:
         linear-gradient(180deg,
-          rgba(255,255,255,.55) 0%,
-          rgba(255,255,255,.85) 35%,
-          rgba(255,255,255,.92) 100%
+          rgba(255,255,255,.95) 0%,
+          rgba(255,255,255,.92) 45%,
+          rgba(255,255,255,.65) 75%,
+          rgba(255,255,255,.45) 100%
         );
     }
     .lp-section { padding: 56px 24px; }
