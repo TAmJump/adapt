@@ -79,44 +79,51 @@
     padding: 0;
     text-align: left;
     isolation: isolate;
+    min-height: 720px;
   }
-  /* チーム写真背景 */
+  /* チーム写真背景（全面・トリミングなし、顔バンドが画面上半分に集中する位置） */
   .lp-hero::before {
     content: '';
     position: absolute;
     inset: 0;
     background-image: url('images/team_yaruze.jpg');
     background-size: cover;
-    background-position: right 28%;
+    background-position: center 18%;
     z-index: -2;
   }
-  /* 白系オーバーレイ（左側=文字エリアを十分白く飛ばし、右側=顔エリアを透けさせる） */
+  /* 全面薄白オーバーレイ（写真透けOK・下半分はテキストカードのため濃く） */
   .lp-hero::after {
     content: '';
     position: absolute;
     inset: 0;
     background:
-      linear-gradient(95deg,
-        rgba(255,255,255,1.00) 0%,
-        rgba(255,255,255,.98) 35%,
-        rgba(255,255,255,.78) 58%,
-        rgba(255,255,255,.45) 80%,
-        rgba(255,255,255,.28) 100%
-      ),
       linear-gradient(180deg,
-        rgba(255,255,255,.06) 0%,
-        rgba(255,255,255,.00) 35%,
-        rgba(255,255,255,.00) 70%,
-        rgba(255,255,255,.50) 100%
+        rgba(255,255,255,.12) 0%,
+        rgba(255,255,255,.12) 40%,
+        rgba(255,255,255,.55) 58%,
+        rgba(255,255,255,.92) 78%,
+        rgba(255,255,255,1.0) 100%
       );
     z-index: -1;
   }
   .lp-hero__inner {
     max-width: 900px;
     margin: 0 auto;
-    padding: 96px 32px 80px;
+    padding: 0 32px;
     position: relative;
     z-index: 1;
+  }
+  /* テキストカード: 半透明白ガラス、顔バンドの下（HERO 下半分）に配置 */
+  .lp-hero__card {
+    margin-top: 380px;
+    margin-bottom: 60px;
+    padding: 32px 40px 40px;
+    background: rgba(255,255,255,.95);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255,255,255,.7);
+    border-radius: 22px;
+    box-shadow: 0 18px 52px rgba(15,23,42,.18), 0 4px 12px rgba(15,23,42,.08);
   }
   .lp-hero__eyebrow {
     font-family: 'JetBrains Mono', monospace;
@@ -124,34 +131,33 @@
     letter-spacing: 0.18em;
     color: var(--ink-muted);
     text-transform: uppercase;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
   .lp-hero__title {
     font-family: 'Zen Kaku Gothic New', sans-serif;
-    font-size: clamp(40px, 7vw, 72px);
+    font-size: clamp(34px, 5.6vw, 56px);
     font-weight: 900;
     color: var(--ink);
     letter-spacing: -0.02em;
-    line-height: 1.05;
-    margin: 0 0 18px 0;
-    text-shadow: 0 1px 2px rgba(255,255,255,.6);
+    line-height: 1.1;
+    margin: 0 0 14px 0;
+    text-shadow: none;
   }
   .lp-hero__tag {
     font-family: 'Zen Kaku Gothic New', sans-serif;
-    font-size: clamp(18px, 2.4vw, 24px);
+    font-size: clamp(16px, 2vw, 22px);
     font-weight: 700;
     color: var(--red);
     letter-spacing: 0.04em;
-    margin: 0 0 32px 0;
-    text-shadow: 0 1px 2px rgba(255,255,255,.7);
+    margin: 0 0 22px 0;
+    text-shadow: none;
   }
   .lp-hero__lead {
-    font-size: 16px;
-    line-height: 1.9;
+    font-size: 15px;
+    line-height: 1.85;
     color: var(--ink-soft);
-    max-width: 620px;
-    margin: 0 0 40px 0;
-    text-shadow: 0 1px 2px rgba(255,255,255,.7);
+    margin: 0 0 28px 0;
+    text-shadow: none;
   }
   .lp-hero__lead strong {
     color: var(--ink);
@@ -463,16 +469,14 @@
 
   /* Mobile adjustments */
   @media (max-width: 640px) {
-    .lp-hero__inner { padding: 64px 24px 56px; }
-    .lp-hero::before { background-position: center 78%; }
-    .lp-hero::after {
-      background:
-        linear-gradient(180deg,
-          rgba(255,255,255,.95) 0%,
-          rgba(255,255,255,.92) 45%,
-          rgba(255,255,255,.65) 75%,
-          rgba(255,255,255,.45) 100%
-        );
+    .lp-hero { min-height: 600px; }
+    .lp-hero__inner { padding: 0 20px; }
+    .lp-hero::before { background-position: center 20%; }
+    .lp-hero__card {
+      margin-top: 280px;
+      margin-bottom: 48px;
+      padding: 24px 22px 28px;
+      border-radius: 18px;
     }
     .lp-section { padding: 56px 24px; }
     .lp-contact { padding: 48px 24px; }
@@ -517,17 +521,19 @@
 <!-- Hero -->
 <section class="lp-hero">
   <div class="lp-hero__inner">
-    <div class="lp-hero__eyebrow">やるゼ！ / Vision Of Oneness</div>
-    <h1 class="lp-hero__title">面倒なこと、<br>全部やるゼ！</h1>
-    <p class="lp-hero__tag">業務の起点を、ひとつに。</p>
-    <p class="lp-hero__lead">
-      <strong>やるゼ！は、現場の業務をひとつにまとめる親プラットフォームです。</strong><br>
-      ｔやるゼ！（設備管理）、ｍやるゼ！（医療連携）など、ひとつのアカウントで一気通貫。<br>
-      役割は分けたまま、起点だけはひとつに。それが Vision Of Oneness です。
-    </p>
-    <div class="lp-hero__cta">
-      <a href="register.html" class="btn btn--primary">新規登録（無料）</a>
-      <a href="login.html" class="btn btn--ghost">ログイン</a>
+    <div class="lp-hero__card">
+      <div class="lp-hero__eyebrow">やるゼ！ / Vision Of Oneness</div>
+      <h1 class="lp-hero__title">面倒なこと、<br>全部やるゼ！</h1>
+      <p class="lp-hero__tag">業務の起点を、ひとつに。</p>
+      <p class="lp-hero__lead">
+        <strong>やるゼ！は、現場の業務をひとつにまとめる親プラットフォームです。</strong><br>
+        ｔやるゼ！（設備管理）、ｍやるゼ！（医療連携）など、ひとつのアカウントで一気通貫。<br>
+        役割は分けたまま、起点だけはひとつに。それが Vision Of Oneness です。
+      </p>
+      <div class="lp-hero__cta">
+        <a href="register.html" class="btn btn--primary">新規登録（無料）</a>
+        <a href="login.html" class="btn btn--ghost">ログイン</a>
+      </div>
     </div>
   </div>
 </section>
