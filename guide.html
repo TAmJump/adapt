@@ -220,7 +220,7 @@
           </ul>
         </li>
         <li>
-          <a href="#admin">タムジ管理者向け</a>
+          <a href="#admin">運営管理者向け</a>
           <ul>
             <li class="sub"><a href="#admin-summary">全体サマリー</a></li>
             <li class="sub"><a href="#admin-partner">Reseller管理</a></li>
@@ -237,14 +237,14 @@
         <h2 class="panel-title">はじめに</h2>
         <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
           やるゼ！は複数のモジュール（ｔやるゼ！・ｍやるゼ！）をひとつのIDで束ねるプラットフォームです。<br>
-          役割（エンドユーザー／Reseller／タムジ管理者）によって操作画面が異なるため、この操作ガイドも役割ごとに整理しています。左の目次から必要な箇所にジャンプしてください。
+          役割（エンドユーザー／Reseller／運営管理者）によって操作画面が異なるため、この操作ガイドも役割ごとに整理しています。左の目次から必要な箇所にジャンプしてください。
         </p>
         <div class="note" style="margin-top:14px;">
           <strong>用語のおさらい：</strong>
           <ul style="margin:6px 0 0 0;padding-left:20px;">
             <li><strong>エンドユーザー</strong> … モジュールを実際に使う会社のアカウント</li>
             <li><strong>Reseller</strong> … エンドユーザーを勧誘・サポートする会社（Master Reseller／Resellerの2階層）</li>
-            <li><strong>タムジ管理者</strong> … 全体の管理を行うタムジ社の運用アカウント（role=tamj_admin）</li>
+            <li><strong>運営管理者</strong> … 全体の管理を行う運営会社の運用アカウント（role=tamj_admin）</li>
           </ul>
         </div>
       </section>
@@ -417,7 +417,7 @@
           <div class="step-title"><span class="step-num">1</span>Resellerログインページへ</div>
           <div class="step-body">
             URL: <span class="code">https://yaruze.tamjump.com/partner-login.html</span><br>
-            タムジ社（Master Resellerの場合）または上位のMaster Reseller（Resellerの場合）から通知されたログインIDとパスワードでログインします。
+            運営会社（Master Resellerの場合）または上位のMaster Reseller（Resellerの場合）から通知されたログインIDとパスワードでログインします。
           </div>
         </div>
         <div style="padding:10px 0;">
@@ -470,9 +470,9 @@
       </section>
 
       <section class="card" id="admin">
-        <h2 class="panel-title">タムジ管理者向け <span class="role-chip role-chip--admin">TAMJ ADMIN</span></h2>
+        <h2 class="panel-title">運営管理者向け <span class="role-chip role-chip--admin">運営管理者</span></h2>
         <p style="color:var(--ink-muted);font-size:13px;line-height:1.75;">
-          タムジ社の管理アカウント（master_staff.role='tamj_admin'）専用の操作です。<br>
+          運営会社の管理アカウント（master_staff.role='tamj_admin'）専用の操作です。<br>
           ログイン後、ヘッダーに <span class="code">管理</span> リンクが表示されるとアクセスできます。
         </p>
       </section>
@@ -503,7 +503,7 @@
           <div class="step-title"><span class="step-num">2</span>情報入力</div>
           <div class="step-body">
             会社名・ログインID・初期パスワード・メール・電話・<strong>按分率（%）</strong>を入力。<br>
-            按分率 = タムジ売上総額のうち、このMaster Resellerに支払う割合。
+            按分率 = 運営会社の売上総額のうち、このMaster Resellerに支払う割合。
           </div>
         </div>
         <div style="padding:8px 0;border-bottom:1px solid var(--line);">
@@ -523,7 +523,7 @@
       <section class="card" id="admin-ledger">
         <h3 class="panel-title" style="font-size:15px;">③ 月次台帳・支払い完了マーク</h3>
         <p style="color:var(--ink-muted);font-size:13px;">
-          月末のCronで自動的に前月分の売上が集計され、台帳（<span class="code">revenue_ledger</span>）に記録されます。タムジ社は実際の振込後、管理画面から「支払い完了」をマークします。
+          月末のCronで自動的に前月分の売上が集計され、台帳（<span class="code">revenue_ledger</span>）に記録されます。運営会社は実際の振込後、管理画面から「支払い完了」をマークします。
         </p>
         <div style="padding:8px 0;border-bottom:1px solid var(--line);">
           <div class="step-title"><span class="step-num">1</span>月次台帳タブを開く</div>
@@ -544,7 +544,7 @@
           </div>
         </div>
         <div class="note">
-          <strong>原則：</strong>タムジはMaster Resellerにのみ支払います。Reseller経由の売上は上位Master Resellerコードに集約されて台帳に載るため、タムジ→Resellerの直接支払いはありません（Resellerへの支払はMaster Resellerの業務）。
+          <strong>原則：</strong>運営会社はMaster Resellerにのみ支払います。Reseller経由の売上は上位Master Resellerコードに集約されて台帳に載るため、運営会社→Resellerの直接支払いはありません（Resellerへの支払はMaster Resellerの業務）。
         </div>
       </section>
 

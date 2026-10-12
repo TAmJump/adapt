@@ -151,7 +151,7 @@
           <h2>1. 招待の確認</h2>
           <div class="invitation-info">
             <strong>登録種別:</strong> ${roleLabel}<br>
-            ${inv.parent_company_name ? `<strong>招待元:</strong> ${escapeHtml(inv.parent_company_name)}<br>` : '<strong>招待元:</strong> タムジ社<br>'}
+            ${inv.parent_company_name ? `<strong>招待元:</strong> ${escapeHtml(inv.parent_company_name)}<br>` : '<strong>招待元:</strong> 運営会社<br>'}
             <strong>招待先メール:</strong> ${escapeHtml(inv.invited_email)}<br>
             <strong>初期契約期間:</strong> ${inv.initial_contract_months}ヶ月<br>
             <strong>有効期限:</strong> ${new Date(inv.expires_at).toLocaleString('ja-JP')}
@@ -325,7 +325,7 @@
           </div>
           <div class="field">
             <label>口座名義（カナ） <span class="req">*</span></label>
-            <input id="fAcctHolder" type="text" maxlength="100" value="${escapeAttr(bi.account_holder)}" placeholder="カ）タムジタロウ" />
+            <input id="fAcctHolder" type="text" maxlength="100" value="${escapeAttr(bi.account_holder)}" placeholder="カ）ヤマダタロウ" />
           </div>
           <div class="field">
             <label>メモ（任意）</label>

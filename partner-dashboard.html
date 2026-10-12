@@ -305,7 +305,7 @@
     <tr><th>契約開始日</th><td class="mono">${formatDate(p.contract_start_at)}</td></tr>
     <tr><th>契約終了予定日</th><td class="mono">${formatDate(p.contract_end_at)}</td></tr>
     ${p.parent ? `<tr><th>ご担当の Master Reseller</th><td><span class="mono">${Adapt.escapeHTML(p.parent.code)}</span> ${Adapt.escapeHTML(p.parent.company_name)}</td></tr>` : ''}
-    ${isSuper && p.revenue_share_pct != null ? `<tr><th>按分率（タムジ→自社）</th><td class="mono">${p.revenue_share_pct}%</td></tr>` : ''}
+    ${isSuper && p.revenue_share_pct != null ? `<tr><th>按分率（運営会社→自社）</th><td class="mono">${p.revenue_share_pct}%</td></tr>` : ''}
   `;
 
   // --- サマリー取得 ---
@@ -345,7 +345,7 @@
         </div>`);
     }
     summaryEl.innerHTML = `<div class="metric-grid">${metrics.join('')}</div>
-      ${!isSuper ? '<p class="muted" style="font-size:12px; margin:10px 0 0 0;">売上情報はMaster Resellerから共有されます（タムジ社台帳は表示されません）。</p>' : ''}`;
+      ${!isSuper ? '<p class="muted" style="font-size:12px; margin:10px 0 0 0;">売上情報はMaster Resellerから共有されます（運営会社台帳は表示されません）。</p>' : ''}`;
   } catch (e) {
     summaryEl.innerHTML = `<div class="msg msg--err">サマリー取得失敗: ${Adapt.escapeHTML(e.message)}</div>`;
   }
@@ -1136,7 +1136,7 @@
           effective_before_contract: '発効日は契約開始日以降を指定してください',
           not_your_sub_agent: '権限がありません（あなたのResellerではありません）',
           forbidden_super_only: 'この操作はMaster Resellerのみ可能です',
-          parent_share_not_set: 'あなたの取得率（タムジ→自社）が未設定です。管理者に連絡してください',
+          parent_share_not_set: 'あなたの取得率（運営会社→自社）が未設定です。管理者に連絡してください',
           partner_not_found: '対象が見つかりません'
         };
         let errMsg = errMap[e.message];

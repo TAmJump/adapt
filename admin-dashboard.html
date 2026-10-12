@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="やるゼ！">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="robots" content="noindex" />
-<title>タムジ管理画面｜やるゼ！</title>
+<title>運営管理画面｜やるゼ！</title>
 <link rel="stylesheet" href="assets/style.css?v=20260430c" />
 <style>
   .metric-grid {
@@ -127,7 +127,7 @@
 <main class="container">
   <section class="page-intro">
     <p class="section-label">TAmJump Admin</p>
-    <h1>タムジ管理画面</h1>
+    <h1>運営管理画面</h1>
     <p>Reseller・売上・支払い台帳の全体管理</p>
   </section>
 
@@ -272,7 +272,7 @@
 
   // tamj_admin 以外はトップへ
   if (session.user.role !== 'tamj_admin') {
-    alert('この画面はタムジ社管理者のみアクセス可能です。');
+    alert('この画面は運営会社管理者のみアクセス可能です。');
     location.href = 'index.html';
     return;
   }
@@ -645,7 +645,7 @@
             <div class="field">
               <label for="supSharePct">按分率（%） <span class="req">*</span></label>
               <input id="supSharePct" type="number" min="0" max="100" step="0.1" value="30" />
-              <div class="hint">タムジ売上総額のうち、このMaster Resellerに支払う割合</div>
+              <div class="hint">運営会社の売上総額のうち、このMaster Resellerに支払う割合</div>
             </div>
           </form>
           <div class="modal-actions">
@@ -938,7 +938,7 @@
                 <tr>
                   <td>${Adapt.escapeHTML(inv.invited_email)}</td>
                   <td>${inv.invited_role === 'super' ? 'Master Reseller' : 'Reseller'}</td>
-                  <td>${inv.parent_company_name ? Adapt.escapeHTML(inv.parent_company_name) : '<span class="muted">タムジ社</span>'}</td>
+                  <td>${inv.parent_company_name ? Adapt.escapeHTML(inv.parent_company_name) : '<span class="muted">運営会社</span>'}</td>
                   <td class="mono">${inv.initial_contract_months}ヶ月</td>
                   <td class="mono">${inv.initial_revenue_share_pct != null ? inv.initial_revenue_share_pct + '%' : '-'}</td>
                   <td>${statusBadge}</td>

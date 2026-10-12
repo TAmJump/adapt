@@ -79,10 +79,10 @@
     if (daysLeft !== null) {
       if (daysLeft < 0) {
         contractBadge = '<span class="contract-badge expired">契約終了</span>';
-        contractNote = '<p class="edit-note">契約は既に終了しています。継続をご希望の場合はタムジ社までご連絡ください。</p>';
+        contractNote = '<p class="edit-note">契約は既に終了しています。継続をご希望の場合は運営会社までご連絡ください。</p>';
       } else if (daysLeft <= 60) {
         contractBadge = `<span class="contract-badge warn">終了 ${daysLeft}日前</span>`;
-        contractNote = '<p class="edit-note">契約終了まで60日を切りました。継続をご希望の場合はタムジ社（info@tamjump.com）までご連絡ください。</p>';
+        contractNote = '<p class="edit-note">契約終了まで60日を切りました。継続をご希望の場合は運営会社（info@tamjump.com）までご連絡ください。</p>';
       }
     }
 
@@ -106,7 +106,7 @@
           ` : ''}
         </div>
         <p class="edit-note">
-          会社名・ログインID・種別の変更はタムジ社（<a href="mailto:info@tamjump.com">info@tamjump.com</a>）までご連絡ください。
+          会社名・ログインID・種別の変更は運営会社（<a href="mailto:info@tamjump.com">info@tamjump.com</a>）までご連絡ください。
         </p>
       </section>
 
@@ -189,7 +189,7 @@
           </div>
           <div class="field">
             <label for="fAccountHolder">口座名義（カナ推奨）</label>
-            <input id="fAccountHolder" type="text" maxlength="100" value="${Adapt.escapeHTML(bank.account_holder || '')}" placeholder="例: カ）タムジタロウ" />
+            <input id="fAccountHolder" type="text" maxlength="100" value="${Adapt.escapeHTML(bank.account_holder || '')}" placeholder="例: カ）ヤマダタロウ" />
           </div>
           <div class="edit-actions">
             <button class="btn" id="bankCancelBtn" type="button">キャンセル</button>
@@ -206,7 +206,7 @@
           <div class="lbl">契約期間</div>
           <div class="val mono">${startYMD} 〜 ${endYMD}</div>
           ${isSuper && p.revenue_share_pct != null ? `
-          <div class="lbl">按分率（タムジ→自社）</div>
+          <div class="lbl">按分率（運営会社→自社）</div>
           <div class="val"><strong>${p.revenue_share_pct}%</strong></div>
           ` : ''}
         </div>
@@ -420,7 +420,7 @@
       return `
         <div style="margin-top:12px;padding:10px 12px;background:#dcfce7;border-left:3px solid #15803d;border-radius:4px;font-size:13px;">
           <strong>継続申請中</strong>（${formatDateTime(p.renewal_requested_at)}）<br>
-          タムジ社の承認をお待ちください。
+          運営会社の承認をお待ちください。
           ${p.renewal_note ? `<div style="margin-top:4px;padding:4px 8px;background:#fff;border-radius:3px;font-size:12px;">備考: ${escapeText(p.renewal_note)}</div>` : ''}
           <div class="edit-actions" style="margin-top:8px;">
             <button class="btn btn--sm" id="renewalCancelBtn" type="button">申請を取り消す</button>
@@ -451,7 +451,7 @@
             <button class="btn btn--sm" id="terminateReqBtn" type="button">終了を申請する</button>
           </div>
           <p class="edit-note" style="margin-top:8px;">
-            ※ 申請後、タムジ社の承認後に反映されます。
+            ※ 申請後、運営会社の承認後に反映されます。
           </p>
         </div>`;
     }
@@ -483,8 +483,8 @@
     const title = type === 'renewal' ? '継続申請' : '終了申請';
     const confirmLabel = type === 'renewal' ? '継続を申請する' : '終了を申請する';
     const msg = type === 'renewal'
-      ? '契約を継続して +1年延長を申請します。タムジ社の承認後、契約終了予定日が延長されます。'
-      : '契約を終了する申請を行います。タムジ社の承認後、契約が終了します（当日付）。';
+      ? '契約を継続して +1年延長を申請します。運営会社の承認後、契約終了予定日が延長されます。'
+      : '契約を終了する申請を行います。運営会社の承認後、契約が終了します（当日付）。';
 
     let wrap = document.getElementById('reqModalWrap');
     if (!wrap) {

@@ -265,7 +265,7 @@ async function requirePartnerAuth(request, db) {
   return { partner: sess };
 }
 
-// タムジ管理者（master_staff.role='tamj_admin'）認証
+// 運営管理者（master_staff.role='tamj_admin'）認証
 // 通常の requireAuth に加えてロールチェックを行う
 async function requireTamjAdmin(request, db) {
   const r = await requireAuth(request, db);
@@ -311,7 +311,7 @@ const nextAgentId = async (db) => {
   return 'AGT-' + String(n).padStart(6, '0');
 };
 
-// Master Reseller（SUP-XXXXXX）の次の連番 — タムジがMaster Resellerを登録する際に使用
+// Master Reseller（SUP-XXXXXX）の次の連番 — 運営会社がMaster Resellerを登録する際に使用
 const nextSuperId = async (db) => {
   const row = await db.prepare(
     "SELECT partner_id FROM partners WHERE type = 'super' AND partner_id LIKE 'SUP-%' ORDER BY partner_id DESC LIMIT 1"
@@ -446,9 +446,9 @@ const todayJSTDate = () => {
 //  Cron (ledger_monthly_close) と手動再集計APIから共通利用
 //
 //  設計書§12.5 の原則:
-//   - タムジはMaster Resellerにしか支払わない
+//   - 運営会社はMaster Resellerにしか支払わない
 //   - Reseller経由の売上は上位のMaster Resellerコードで集約
-//   - タムジ直販（partner_code=NULL）は台帳に入れない
+//   - 直販（partner_code=NULL）は台帳に入れない
 // =========================================================
 async function generateMonthlyLedger(db, yearMonth) {
   // 対象月の範囲
@@ -613,11 +613,11 @@ async function runContractNotify2Month(db, env) {
 ▼ 継続をご希望の場合
 Resellerダッシュボードにログインし、「アカウント設定」→「契約情報」
 の「継続を申請する」ボタンから申請してください。
-タムジ社の承認後、契約期間が +1年延長されます。
+運営会社の承認後、契約期間が +1年延長されます。
 
 ▼ 終了をご希望の場合
 同じく「アカウント設定」→「契約情報」の「終了を申請する」ボタン
-から申請してください。タムジ社の承認後、契約が終了します。
+から申請してください。運営会社の承認後、契約が終了します。
 
 Resellerログイン: ${baseUrl}/partner-login.html
 アカウント設定: ${baseUrl}/partner-account.html（ログイン後に開けます）
@@ -780,7 +780,7 @@ async function runRecurringPartnerCheck(db, env) {
       to: adminEmail,
       subject: `【やるゼ！】反社再チェック対象 ${targets.length} 件（年次）`,
       text:
-`タムジ社 管理者 各位
+`運営会社 管理者 各位
 
 承認から約1年が経過したResellerの反社再チェックをお願いいたします。
 対象は以下の ${targets.length} 件です：
@@ -791,7 +791,7 @@ ${listText}
 ${baseUrl}/admin-dashboard.html
 
 --
-TAmJ.Corp
+株式会社GMS
 ※ このメールは毎月1日 00:15 JST に自動送信されます。`
     });
   } catch {}
@@ -909,7 +909,7 @@ export default {
         const pending = {
           company_name, login_id, name, email,
           phone: phone || null, password_hash: passwordHash,
-          partner_code: normalizedPartnerCode  // NULL = タムジ直販
+          partner_code: normalizedPartnerCode  // NULL = 直販
         };
         const expiresAt = plusSec(60 * 60 * 24); // 24時間
 
@@ -995,7 +995,7 @@ ${verifyUrl}
           if (p2 && p2.status === 'active') {
             partnerCodeToPersist = p.partner_code;
           }
-          // もし期間中に失効していても登録自体は続行（partner_code は NULL 扱い＝タムジ直販に降格）
+          // もし期間中に失効していても登録自体は続行（partner_code は NULL 扱い＝直販に降格）
         }
 
         await db.batch([
@@ -1618,7 +1618,7 @@ ${resetUrl}
       }
 
       // Phase 4-3c: Reseller自身による自己情報の更新（email / phone / bank_info）
-      // 会社名・種別・契約期間・按分率・login_id は編集不可（タムジ管理者のみ）
+      // 会社名・種別・契約期間・按分率・login_id は編集不可（運営管理者のみ）
       if (path === '/api/partner/me' && method === 'PUT') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -1763,7 +1763,7 @@ ${resetUrl}
           contract_end_at: p.contract_end_at,
           days_left: daysLeft,
           note: note || null,
-          message: '継続申請を受け付けました。タムジ社の承認をお待ちください。'
+          message: '継続申請を受け付けました。運営会社の承認をお待ちください。'
         }, 200, cors);
       }
 
@@ -1800,7 +1800,7 @@ ${resetUrl}
           ok: true,
           requested_at: nowIso,
           note: note || null,
-          message: '終了申請を受け付けました。タムジ社の承認後、契約が終了します。'
+          message: '終了申請を受け付けました。運営会社の承認後、契約が終了します。'
         }, 200, cors);
       }
 
@@ -2231,14 +2231,14 @@ ${resetUrl}
             customer_count: customerCount,
             active_subscription_count: activeSubscriptionCount,
             sub_agent_count: p.type === 'super' ? subAgentCount : null,
-            current_month_ledger: ledgerSummary  // Resellerはnull（タムジはMaster Resellerにしか支払わないため）
+            current_month_ledger: ledgerSummary  // Resellerはnull（運営会社はMaster Resellerにしか支払わないため）
           }
         }, 200, cors);
       }
 
       // v29 Phase 5: パートナー収益推移（月次・四半期・年次）
       //   Master Reseller のみ：自コードの revenue_ledger を集計
-      //   Reseller : 空配列を返す（タムジ社台帳は見せない既存方針と整合）
+      //   Reseller : 空配列を返す（運営会社台帳は見せない既存方針と整合）
       if (path === '/api/partner/me/revenue-trend' && method === 'GET') {
         const r = await requirePartnerAuth(request, db);
         if (r.error) return json({ error: r.error }, r.status, cors);
@@ -2682,7 +2682,7 @@ ${resetUrl}
         }, 200, cors);
       }
 
-      // =============== タムジ管理画面（master_staff.role='tamj_admin' 専用） ===============
+      // =============== 運営管理画面（master_staff.role='tamj_admin' 専用） ===============
 
       // 管理画面サマリー（全体俯瞰）
       if (path === '/api/admin/summary' && method === 'GET') {
@@ -2864,7 +2864,7 @@ ${resetUrl}
         try {
           await sendEmail(env, {
             to: invited_email,
-            subject: '【やるゼ！】Master Resellerご登録のご案内 / TAmJ.Corp',
+            subject: '【やるゼ！】Master Resellerご登録のご案内 / 株式会社GMS',
             text:
 `この度は やるゼ！ Master Reseller契約にご関心をお寄せいただきありがとうございます。
 
@@ -2879,8 +2879,7 @@ ${registerUrl}
 ご不明な点はこのメールにご返信ください。
 
 --
-TAmJ.Corp
-https://tamjump.com/`
+株式会社GMS`
           });
         } catch {}
 
@@ -2943,7 +2942,7 @@ ${registerUrl}
 ・所要時間: 約10〜15分
 
 --
-TAmJ.Corp`
+株式会社GMS`
           });
         } catch {}
 
@@ -3004,7 +3003,7 @@ ${registerUrl}
 ・有効期限: ${new Date(inv.expires_at).toLocaleString('ja-JP')}
 
 --
-TAmJ.Corp`
+株式会社GMS`
           });
         } catch {}
 
@@ -3287,7 +3286,7 @@ TAmJ.Corp`
         // 承認依頼通知（admin または親 super に）
         try {
           if (inv.invited_role === 'super') {
-            // タムジ社（ADMIN_NOTIFY_EMAIL）に通知
+            // 運営会社（ADMIN_NOTIFY_EMAIL）に通知
             const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
             await sendEmail(env, {
               to: adminEmail,
@@ -3322,10 +3321,10 @@ ${(env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '')}/admin-dash
 法人番号: ${corporate_number}
 担当者: ${contact_name} <${contact_email}>
 
-タムジ社による承認をお待ちください。
+運営会社による承認をお待ちください。
 
 --
-TAmJ.Corp`
+株式会社GMS`
               });
             }
           }
@@ -3373,10 +3372,10 @@ TAmJ.Corp`
 
 ご登録申請につきまして、誠に申し訳ございませんが今回はご見送りとさせていただきます。
 ${reason ? '\n理由:\n' + reason + '\n' : ''}
-ご不明な点はタムジ社（info@tamjump.com）までお問合せください。
+ご不明な点は運営会社（info@tamjump.com）までお問合せください。
 
 --
-TAmJ.Corp`
+株式会社GMS`
             });
           }
         } catch {}
@@ -3464,7 +3463,7 @@ TAmJ.Corp`
         }, 200, cors);
       }
 
-      // =============== Phase 4-3d: タムジ側 契約申請の承認 ===============
+      // =============== Phase 4-3d: 運営会社側 契約申請の承認 ===============
 
       // 保留中申請一覧
       if (path === '/api/admin/renewal-requests' && method === 'GET') {
@@ -3540,8 +3539,7 @@ ${typeLabel}契約の継続申請をご承認いたしました。
 引き続き やるゼ！ をよろしくお願いいたします。
 
 --
-TAmJ.Corp
-https://tamjump.com/`
+株式会社GMS`
             });
           }
         } catch {}
@@ -3590,10 +3588,10 @@ https://tamjump.com/`
 
 ${typeLabel}契約の継続申請につきまして、誠に申し訳ございませんが今回はご見送りとさせていただきます。
 ${reason ? '\n理由:\n' + reason + '\n' : ''}
-詳細につきましてはタムジ社（info@tamjump.com）までお問合せください。
+詳細につきましては運営会社（info@tamjump.com）までお問合せください。
 
 --
-TAmJ.Corp`
+株式会社GMS`
             });
           }
         } catch {}
@@ -3647,7 +3645,7 @@ ${typeLabel}契約を終了いたしました。
 これまでのご利用、誠にありがとうございました。
 
 --
-TAmJ.Corp`
+株式会社GMS`
             });
           }
         } catch {}
@@ -3691,10 +3689,10 @@ TAmJ.Corp`
 
 ${typeLabel}契約の終了申請につきまして、以下の理由により保留とさせていただきます。
 ${reason ? '\n理由:\n' + reason + '\n' : ''}
-ご不明な点はタムジ社（info@tamjump.com）までご連絡ください。
+ご不明な点は運営会社（info@tamjump.com）までご連絡ください。
 
 --
-TAmJ.Corp`
+株式会社GMS`
             });
           }
         } catch {}
@@ -3702,7 +3700,7 @@ TAmJ.Corp`
         return json({ ok: true, partner_id: partnerId }, 200, cors);
       }
 
-      // =============== Phase 4-3a: タムジ→Master Reseller 按分率管理 ===============
+      // =============== Phase 4-3a: 運営会社→Master Reseller 按分率管理 ===============
 
       // Master Reseller詳細ドリルダウン（Phase 4-3e）
       const adminPartnerDetailMatch = path.match(/^\/api\/admin\/partners\/([A-Z]{3}-\d{6})\/detail$/);
@@ -3752,7 +3750,7 @@ TAmJ.Corp`
           " ORDER BY mc.created_at DESC"
         ).bind(...ownerCodes).all();
 
-        // 月別売上推移（直近12ヶ月・partner_code = partner.code の分のみ=タムジ視点）
+        // 月別売上推移（直近12ヶ月・partner_code = partner.code の分のみ=運営会社視点）
         const monthlyRevenue = isSuper ? await db.prepare(
           "SELECT year_month, " +
           "       COALESCE(SUM(gross_amount),0) AS gross_amount, " +
