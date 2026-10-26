@@ -600,7 +600,7 @@ async function runContractNotify2Month(db, env) {
     try {
       const endDate = new Date(p.contract_end_at).toLocaleDateString('ja-JP');
       const typeLabel = p.type === 'super' ? 'Master Reseller' : 'Reseller';
-      const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+      const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
       await sendEmail(env, {
         to: p.email,
         subject: `【やるゼ！】契約終了のお知らせ（2ヶ月前）/ ${p.company_name} 様`,
@@ -767,8 +767,8 @@ async function runRecurringPartnerCheck(db, env) {
   }
 
   // admin にリマインダーメール
-  const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
-  const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+  const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@115en.com';
+  const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
   try {
     const listText = targets.map(p => {
       const approvedYMD = new Date(p.approved_at).toISOString().slice(0, 10);
@@ -1199,7 +1199,7 @@ ${verifyUrl}
           "INSERT INTO password_reset_tokens (token, staff_id, email, expires_at) VALUES (?,?,?,?)"
         ).bind(token, user.staff_id, email, expiresAt).run();
 
-        const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+        const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
         const resetUrl = `${baseUrl}/reset-password.html?token=${token}`;
 
         try {
@@ -2030,7 +2030,7 @@ ${resetUrl}
           "INSERT INTO partner_password_reset_tokens (token, partner_id, email, expires_at) VALUES (?,?,?,?)"
         ).bind(token, p.partner_id, email, expiresAt).run();
 
-        const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+        const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
         const resetUrl = `${baseUrl}/partner-reset-password.html?token=${token}`;
 
         try {
@@ -2859,7 +2859,7 @@ ${resetUrl}
           "VALUES (?, ?, 'super', ?, ?, ?, ?, 'issued', ?)"
         ).bind(token, invited_email, pct, months, note || null, r.user.staff_id, expiresAt).run();
 
-        const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+        const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
         const registerUrl = `${baseUrl}/partner-register.html?token=${token}`;
         try {
           await sendEmail(env, {
@@ -2924,7 +2924,7 @@ ${registerUrl}
           "VALUES (?, ?, 'agent', ?, ?, ?, ?, ?, 'issued', ?)"
         ).bind(token, invited_email, r.partner.partner_id, pct, months, note || null, r.partner.partner_id, expiresAt).run();
 
-        const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+        const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
         const registerUrl = `${baseUrl}/partner-register.html?token=${token}`;
         try {
           await sendEmail(env, {
@@ -2989,7 +2989,7 @@ ${registerUrl}
         if (inv.status !== 'issued') return json({ error: 'invalid_status', current: inv.status }, 400, cors);
         if ((inv.resend_count || 0) >= 5) return json({ error: 'resend_limit_reached' }, 400, cors);
 
-        const baseUrl = (env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '');
+        const baseUrl = (env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '');
         const registerUrl = `${baseUrl}/partner-register.html?token=${inv.token}`;
         try {
           await sendEmail(env, {
@@ -3287,7 +3287,7 @@ ${registerUrl}
         try {
           if (inv.invited_role === 'super') {
             // 運営会社（ADMIN_NOTIFY_EMAIL）に通知
-            const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@tamjump.com';
+            const adminEmail = env.ADMIN_NOTIFY_EMAIL || 'info@115en.com';
             await sendEmail(env, {
               to: adminEmail,
               subject: `【やるゼ！】Master Resellerの新規登録申請: ${company_name}`,
@@ -3301,7 +3301,7 @@ ${registerUrl}
 partner_id: ${partnerId}
 
 管理画面で承認/却下の処理をお願いします。
-${(env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '')}/admin-dashboard.html`
+${(env.BASE_URL || 'https://yaruze.115en.com').replace(/\/+$/, '')}/admin-dashboard.html`
             });
           } else if (inv.parent_partner_id) {
             // 親 super に通知
@@ -3372,7 +3372,7 @@ ${(env.BASE_URL || 'https://yaruze.tamjump.com').replace(/\/+$/, '')}/admin-dash
 
 ご登録申請につきまして、誠に申し訳ございませんが今回はご見送りとさせていただきます。
 ${reason ? '\n理由:\n' + reason + '\n' : ''}
-ご不明な点は運営会社（info@tamjump.com）までお問合せください。
+ご不明な点は運営会社（info@115en.com）までお問合せください。
 
 --
 株式会社GMS`
@@ -3588,7 +3588,7 @@ ${typeLabel}契約の継続申請をご承認いたしました。
 
 ${typeLabel}契約の継続申請につきまして、誠に申し訳ございませんが今回はご見送りとさせていただきます。
 ${reason ? '\n理由:\n' + reason + '\n' : ''}
-詳細につきましては運営会社（info@tamjump.com）までお問合せください。
+詳細につきましては運営会社（info@115en.com）までお問合せください。
 
 --
 株式会社GMS`
@@ -3689,7 +3689,7 @@ ${typeLabel}契約を終了いたしました。
 
 ${typeLabel}契約の終了申請につきまして、以下の理由により保留とさせていただきます。
 ${reason ? '\n理由:\n' + reason + '\n' : ''}
-ご不明な点は運営会社（info@tamjump.com）までご連絡ください。
+ご不明な点は運営会社（info@115en.com）までご連絡ください。
 
 --
 株式会社GMS`

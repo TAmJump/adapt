@@ -9,18 +9,18 @@ window.ADAPT_CONFIG = {
       name: 'ｔやるゼ！',
       desc: '施設設備の通報・管理会社連携・QR台帳。',
       accent: '#d4380d',
-      icon: 'https://tyaruze-app.tamjump.com/icon-192.png',
-      url: 'https://tyaruze-app.tamjump.com/login.html',
-      lp:  'https://tyaruze.tamjump.com',
+      icon: 'https://tyaruze-app.115en.com/icon-192.png',
+      url: 'https://tyaruze-app.115en.com/login.html',
+      lp:  'https://tyaruze.115en.com',
       tags: '施設設備管理'
     },
     medadapt: {
       name: 'ｍやるゼ！',
       desc: '医療・介護の法人間連携OS。NDA・退院通知・面談。',
       accent: '#0891b2',
-      icon: 'https://myaruze.tamjump.com/icon-192.png',
-      url: 'https://myaruze.tamjump.com/app.html',
-      lp:  'https://myaruze.tamjump.com',
+      icon: 'https://myaruze.115en.com/icon-192.png',
+      url: 'https://myaruze.115en.com/app.html',
+      lp:  'https://myaruze.115en.com',
       tags: '医療介護連携'
     }
   }
