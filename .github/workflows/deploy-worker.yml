@@ -21,3 +21,4 @@ jobs:
           accountId: b9de28abfd009bbf696ceec4da62c5b8
           wranglerVersion: "4"
           command: deploy --keep-vars
+# 鍵（CLOUDFLARE_API_TOKEN）はリポジトリの Secrets に登録済み
