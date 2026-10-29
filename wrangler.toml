@@ -1,0 +1,22 @@
+# やるゼ！ API（adapt-api）。本体は assets/worker.js
+name = "adapt-api"
+main = "assets/worker.js"
+compatibility_date = "2026-04-20"
+# 変数はここに書いたもの以外は Cloudflare 側の値を残す（deploy --keep-vars）
+[vars]
+ALLOWED_ORIGINS = "https://yaruze.115en.com,https://tyaruze.115en.com,https://tyaruze-app.115en.com,https://myaruze.115en.com,https://yaruze.tamjump.com,https://tyaruze.tamjump.com,https://tyaruze-app.tamjump.com,https://myaruze.tamjump.com,https://tamjump.github.io"
+BASE_URL = "https://yaruze.115en.com"
+MEDADAPT_APP_URL = "https://myaruze.115en.com"
+ONETOUCH_APP_URL = "https://tyaruze-app.115en.com"
+[[d1_databases]]
+binding = "DB"
+database_name = "adapt-db"
+database_id = "c22145ae-73fe-4dc1-b309-56d4ba15db92"
+[[services]]
+binding = "MEDADAPT_SVC"
+service = "medadapt-api-v2"
+[[services]]
+binding = "ONETOUCH_SVC"
+service = "onetouch-api"
+[observability]
+enabled = true
